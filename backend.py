@@ -112,7 +112,7 @@ tools = [add_to_schedule]
 def process_message(user_input):
     try:
         # Initialize Model with the tool
-        model = genai.GenerativeModel(model_name='gemini-flash-latest', tools=tools)
+        model = genai.GenerativeModel(model_name='gemini-2.0-flash', tools=tools)
         
         # Start chat with automatic function calling enabled
         chat = model.start_chat(enable_automatic_function_calling=True)
@@ -126,3 +126,4 @@ def process_message(user_input):
     except Exception:
         traceback.print_exc()
         return "⚠️ An error occurred. Check the terminal window for details."
+
