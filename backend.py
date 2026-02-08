@@ -14,15 +14,14 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL: Using 1.5 Flash for stability and speed
-MODEL_NAME = 'gemini-2.5-flash' 
-SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I' 
-CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com' 
+MODEL_NAME = 'gemini-1.5-flash' 
+SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
+CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com'
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/calendar']
 SERVICE_ACCOUNT_FILE = 'credentials.json'
 
 # --- AUTHENTICATION ---
-# (Handles both Cloud and Local environments)
 try:
     import streamlit as st
     if "gcp_service_account" in st.secrets:
@@ -51,7 +50,6 @@ def get_current_time():
     return datetime.datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
 
 # --- TOOL DEFINITIONS ---
-
 def check_schedule(date_str: str = "today"):
     """Reads the calendar for a specific day."""
     try:
@@ -99,7 +97,7 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
         formatted_date = start_time.strftime("%m/%d/%Y %H:%M")
         values = [[formatted_date, summary, item_type, category, notes, False]]
         sheets_service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID, range="WeeklyOverhaul!A:F", valueInputOption="USER_ENTERED", body={'values': values}
+            spreadsheetId=SPREADSHEET_ID, range="WeeklyOverview!A:F", valueInputOption="USER_ENTERED", body={'values': values}
         ).execute()
 
         return f"Success: Added '{summary}' to schedule."
@@ -146,65 +144,63 @@ def send_notification(message: str):
 
 # --- REGISTER TOOLS ---
 tools = [add_to_schedule, check_schedule, remove_task, send_notification]
+# Map for executing tools
+tool_map = {
+    'add_to_schedule': add_to_schedule,
+    'check_schedule': check_schedule,
+    'remove_task': remove_task,
+    'send_notification': send_notification
+}
 
-# --- AI BRAIN (ROBUST MANUAL DISPATCH) ---
+# --- AI BRAIN (SAFE EXECUTION) ---
 def process_message(user_input, chat_history):
     try:
-        # 1. SETUP
         system_instruction = f"You are a receptionist. Current Time: {get_current_time()}. Use tools to modify the schedule."
         model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
         
-        # Disable auto-execution to prevent 'Silence' errors and 'Text' parsing errors
+        # 1. Start Chat with automatic function calling DISABLED to prevent crash
         chat = model.start_chat(enable_automatic_function_calling=False)
         
-        # 2. SEND MESSAGE
+        # 2. Send User Message
         response = chat.send_message(user_input)
         
-        # 3. MANUAL DISPATCH (The Fix)
-        # We check specific parts instead of generic conversion
-        if not response.parts:
-            return "⚠️ Error: AI returned empty response."
-
-        # Check if the AI wants to call a function
-        first_part = response.parts[0]
+        # 3. Check Response Type (CRITICAL FIX)
+        # We access the first part of the candidate content directly
+        part = response.candidates[0].content.parts[0]
         
-        if first_part.function_call:
-            # 🤖 A Tool was triggered!
-            fc = first_part.function_call
+        # Check if it's a function call (Do NOT access .text here)
+        if part.function_call:
+            fc = part.function_call
             func_name = fc.name
             args = dict(fc.args)
             
             print(f"🤖 Gemini Request: {func_name} | Args: {args}")
-
-            # Execute Python Code
-            result = "Error: Function not found"
-            if func_name == "add_to_schedule":
-                result = add_to_schedule(**args)
-            elif func_name == "check_schedule":
-                result = check_schedule(**args)
-            elif func_name == "remove_task":
-                result = remove_task(**args)
-            elif func_name == "send_notification":
-                result = send_notification(**args)
             
+            # Execute Python Function
+            if func_name in tool_map:
+                result = tool_map[func_name](**args)
+            else:
+                result = f"Error: Function {func_name} not found."
+                
             print(f"✅ Tool Result: {result}")
 
-            # Send Result Back to Gemini using Correct Proto
-            # This constructs the response object manually to avoid SDK bugs
-            from google.ai.generativelanguage import FunctionResponse, Part
+            # 4. Send Result Back to Gemini
+            # We use the raw dictionary format which is safer than importing Proto classes
+            function_response_part = {
+                "function_response": {
+                    "name": func_name,
+                    "response": {"result": result}
+                }
+            }
             
-            response_part = Part(
-                function_response=FunctionResponse(
-                    name=func_name,
-                    response={"result": result}
-                )
-            )
+            # Send the tool result back to the model
+            final_response = chat.send_message(function_response_part)
             
-            final_response = chat.send_message([response_part])
+            # Now we can safely return text because the model has finished its job
             return final_response.text
 
         else:
-            # No tool called, just return the text
+            # If no function call, just return the text
             return response.text
 
     except Exception as e:
