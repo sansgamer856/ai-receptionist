@@ -7,3 +7,4 @@ Current Updates for v1.0
 - add a check schedule feature
 - add a notification feature
 - add previous chat memory (up to 15 messages)
+- Determine whether to use model Gemma-3-27B or use model Gemini-3-flash-preview to maximize token savings.

@@ -112,7 +112,7 @@ tools = [add_to_schedule]
 def process_message(user_input):
     try:
         # Initialize Model with the tool
-        model = genai.GenerativeModel(model_name='gemini-3-flash-preview', tools=tools)
+        model = genai.GenerativeModel(model_name='gemma-3-27b-it', tools=tools)
         
         # Start chat with automatic function calling enabled
         chat = model.start_chat(enable_automatic_function_calling=True)
