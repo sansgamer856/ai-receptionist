@@ -13,10 +13,14 @@ from dotenv import load_dotenv
 # --- CONFIGURATION ---
 load_dotenv()
 
-# MODEL: Using 1.5 Flash for stability and speed
-MODEL_NAME = 'gemini-2.5-flash-lite' 
+# MODEL: Updated to the latest Flash Lite preview (closest to your request)
+# If this gives a 404, switch to 'gemini-2.0-flash' or 'gemini-1.5-flash'
+MODEL_NAME = 'gemini-2.0-flash-lite-preview-02-05'
+
+# UPDATED IDs
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
 CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com'
+SHEET_RANGE = 'WeeklyOverhaul!A:F'  # Updated Sheet Name
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/calendar']
 SERVICE_ACCOUNT_FILE = 'credentials.json'
@@ -47,44 +51,62 @@ genai.configure(api_key=api_key)
 
 # --- HELPER FUNCTIONS ---
 def get_current_time():
+    """Returns the current date and time in a clear format."""
     return datetime.datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
 
 # --- TOOL DEFINITIONS ---
+
 def check_schedule(date_str: str = "today"):
     """Reads the calendar for a specific day."""
     try:
         print(f"👀 Checking schedule for {date_str}...")
         now = datetime.datetime.now()
-        if date_str == "today": start = now.replace(hour=0, minute=0, second=0)
-        elif date_str == "tomorrow": start = now.replace(hour=0, minute=0, second=0) + datetime.timedelta(days=1)
-        else: 
-            try: start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            except: return "Error: Date must be YYYY-MM-DD, 'today', or 'tomorrow'."
+        
+        # Handle 'today', 'tomorrow', or specific dates
+        if date_str.lower() == "today":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif date_str.lower() == "tomorrow":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)
+        else:
+            try:
+                start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+            except ValueError:
+                return "Error: Date must be YYYY-MM-DD, 'today', or 'tomorrow'."
         
         end = start + datetime.timedelta(days=1)
         
         events_result = calendar_service.events().list(
-            calendarId=CALENDAR_ID, timeMin=start.isoformat() + 'Z', timeMax=end.isoformat() + 'Z', singleEvents=True, orderBy='startTime'
+            calendarId=CALENDAR_ID, 
+            timeMin=start.isoformat() + 'Z', 
+            timeMax=end.isoformat() + 'Z', 
+            singleEvents=True, 
+            orderBy='startTime'
         ).execute()
         
         events = events_result.get('items', [])
-        if not events: return f"No events found for {date_str}."
+        if not events:
+            return f"No events found for {date_str}."
 
         text = f"Schedule for {date_str}:\n"
         for event in events:
-            time_str = event['start'].get('dateTime', event['start'].get('date'))
-            text += f"- {time_str}: {event.get('summary', 'No Title')} (ID: {event['id']})\n"
+            # Handle different time formats (all-day vs timed)
+            start_t = event['start'].get('dateTime', event['start'].get('date'))
+            summary = event.get('summary', 'No Title')
+            text += f"- {start_t}: {summary}\n"
+            
         return text
-    except Exception as e: return f"Error checking schedule: {str(e)}"
+    except Exception as e:
+        return f"Error checking schedule: {str(e)}"
 
 def add_to_schedule(summary: str, date_time: str, item_type: str, category: str, notes: str = "", duration_hours: float = 1.0):
-    """Adds item to Calendar and Sheets."""
+    """Adds item to Calendar and Sheets (WeeklyOverhaul)."""
     try:
         print(f"📝 Adding to schedule: {summary}")
+        # Parse the ISO date string provided by Gemini
         start_time = datetime.datetime.fromisoformat(date_time)
         end_time = start_time + datetime.timedelta(hours=duration_hours)
         
-        # Calendar
+        # 1. Add to Google Calendar
         event = {
             'summary': f"[{category}] {summary}",
             'description': f"Type: {item_type}\nNotes: {notes}",
@@ -93,15 +115,21 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
         }
         calendar_service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
 
-        # Sheets
+        # 2. Add to Google Sheets (Using new WeeklyOverhaul tab)
         formatted_date = start_time.strftime("%m/%d/%Y %H:%M")
         values = [[formatted_date, summary, item_type, category, notes, False]]
+        body = {'values': values}
+        
         sheets_service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID, range="WeeklyOverview!A:F", valueInputOption="USER_ENTERED", body={'values': values}
+            spreadsheetId=SPREADSHEET_ID, 
+            range=SHEET_RANGE,  # Uses "WeeklyOverhaul!A:F"
+            valueInputOption="USER_ENTERED", 
+            body=body
         ).execute()
 
         return f"Success: Added '{summary}' to schedule."
-    except Exception as e: return f"Error adding: {str(e)}"
+    except Exception as e:
+        return f"Error adding task: {str(e)}"
 
 def remove_task(keyword: str, date_str: str = "today"):
     """Removes a task from Calendar by keyword."""
@@ -129,7 +157,7 @@ def remove_task(keyword: str, date_str: str = "today"):
 
 def send_notification(message: str):
     """Sends email notification."""
-    if not email_user or not email_pass: return "Error: Email credentials not configured in .env."
+    if not email_user or not email_pass: return "Error: Email credentials not configured."
     try:
         print(f"📧 Sending email...")
         msg = MIMEText(message)
@@ -144,7 +172,8 @@ def send_notification(message: str):
 
 # --- REGISTER TOOLS ---
 tools = [add_to_schedule, check_schedule, remove_task, send_notification]
-# Map for executing tools
+
+# Map string names to actual functions (Safe Dispatch)
 tool_map = {
     'add_to_schedule': add_to_schedule,
     'check_schedule': check_schedule,
@@ -152,23 +181,27 @@ tool_map = {
     'send_notification': send_notification
 }
 
-# --- AI BRAIN (SAFE EXECUTION) ---
+# --- AI BRAIN ---
 def process_message(user_input, chat_history):
     try:
-        system_instruction = f"You are a receptionist. Current Time: {get_current_time()}. Use tools to modify the schedule."
+        # 1. SETUP MODEL
+        system_instruction = f"You are a helpful receptionist. Use tools to manage the schedule."
         model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
-        
-        # 1. Start Chat with automatic function calling DISABLED to prevent crash
         chat = model.start_chat(enable_automatic_function_calling=False)
         
-        # 2. Send User Message
-        response = chat.send_message(user_input)
+        # 2. INJECT DATE INTO PROMPT
+        # By adding this to the user's message, the model CANNOT miss it.
+        date_context = f" [System Info: The current date and time is {get_current_time()}]"
+        augmented_input = user_input + date_context
         
-        # 3. Check Response Type (CRITICAL FIX)
-        # We access the first part of the candidate content directly
+        response = chat.send_message(augmented_input)
+        
+        # 3. MANUAL DISPATCH (Safe Mode)
+        if not response.parts:
+            return "⚠️ Error: AI returned empty response."
+            
         part = response.candidates[0].content.parts[0]
         
-        # Check if it's a function call (Do NOT access .text here)
         if part.function_call:
             fc = part.function_call
             func_name = fc.name
@@ -176,34 +209,26 @@ def process_message(user_input, chat_history):
             
             print(f"🤖 Gemini Request: {func_name} | Args: {args}")
             
-            # Execute Python Function
             if func_name in tool_map:
                 result = tool_map[func_name](**args)
             else:
                 result = f"Error: Function {func_name} not found."
-                
+            
             print(f"✅ Tool Result: {result}")
 
-            # 4. Send Result Back to Gemini
-            # We use the raw dictionary format which is safer than importing Proto classes
-            function_response_part = {
+            # Send result back
+            function_response = {
                 "function_response": {
                     "name": func_name,
                     "response": {"result": result}
                 }
             }
-            
-            # Send the tool result back to the model
-            final_response = chat.send_message(function_response_part)
-            
-            # Now we can safely return text because the model has finished its job
+            final_response = chat.send_message(function_response)
             return final_response.text
 
         else:
-            # If no function call, just return the text
             return response.text
 
     except Exception as e:
         traceback.print_exc()
         return f"⚠️ System Error: {str(e)}"
-
