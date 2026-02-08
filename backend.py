@@ -15,8 +15,8 @@ load_dotenv()
 
 # MODEL CHOICE: We use the Preview Flash model for maximum efficiency
 MODEL_NAME = 'gemini-2.0-flash' # Using 2.0 Flash as the stable placeholder for "3.0 Preview"
-SPREADSHEET_ID = 'REPLACE_WITH_YOUR_SPREADSHEET_ID'
-CALENDAR_ID = 'your_actual_email@gmail.com' 
+SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
+CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com' 
 MAX_HISTORY = 15 # Memory limit
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/calendar']
@@ -130,7 +130,7 @@ def add_to_schedule(
         values = [[formatted_date, summary, item_type, category, notes, False]]
         body = {'values': values}
         sheets_service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID, range="Table1!A:F", valueInputOption="USER_ENTERED", body=body
+            spreadsheetId=SPREADSHEET_ID, range="WeeklyOverhaulA:F", valueInputOption="USER_ENTERED", body=body
         ).execute()
 
         return f"Success: Added '{summary}' to schedule."
