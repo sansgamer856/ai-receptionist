@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL CHOICE: We use the Preview Flash model for maximum efficiency
-MODEL_NAME = 'gemini-3.0-flash-preview' # Using 2.0 Flash as the stable placeholder for "3.0 Preview"
+MODEL_NAME = 'gemini-3-flash-preview' # Using 2.0 Flash as the stable placeholder for "3.0 Preview"
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
 CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com' 
 MAX_HISTORY = 15 # Memory limit
@@ -224,4 +224,5 @@ def process_message(user_input, chat_history):
 
     except Exception:
         traceback.print_exc()
+
         return "⚠️ Error processing request."
