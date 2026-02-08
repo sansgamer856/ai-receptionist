@@ -3,6 +3,7 @@ import datetime
 import traceback
 import smtplib
 import time
+import pytz 
 from email.mime.text import MIMEText
 
 import google.generativeai as genai
@@ -15,21 +16,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL
-MODEL_NAME = 'gemini-3-flash-preview' 
+MODEL_NAME = 'gemini-2.0-flash' 
 
-# IDs
+# IDs (ENSURE CALENDAR_ID IS CORRECT!)
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
 CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com'
 SHEET_RANGE = 'WeeklyOverhaul!A:F'
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/calendar']
 SERVICE_ACCOUNT_FILE = 'credentials.json'
+TIMEZONE = 'America/New_York' 
 
 # --- KEY ROTATION SYSTEM ---
 api_keys = []
 current_key_index = 0
 
-# Load keys
 try:
     import streamlit as st
     i = 1
@@ -69,42 +70,52 @@ except Exception:
     email_pass = os.getenv("EMAIL_PASSWORD")
 
 if not api_keys:
-    raise ValueError("❌ No API Keys found! Please set API_KEY_1, etc.")
+    print("❌ WARNING: No API Keys found.")
 
-print(f"🔑 Loaded {len(api_keys)} API Keys. Starting with Key #1.")
-genai.configure(api_key=api_keys[0])
+if api_keys:
+    genai.configure(api_key=api_keys[0])
 
 sheets_service = build('sheets', 'v4', credentials=creds)
 calendar_service = build('calendar', 'v3', credentials=creds)
 
-
 # --- HELPER FUNCTIONS ---
 def switch_api_key():
-    """Switches to the next available API key."""
     global current_key_index
-    if len(api_keys) <= 1:
-        print("⚠️ Quota hit, but only 1 key available.")
-        return False
-    
+    if len(api_keys) <= 1: return False
     current_key_index = (current_key_index + 1) % len(api_keys)
-    new_key = api_keys[current_key_index]
-    print(f"🔄 Switching to API Key #{current_key_index + 1}...")
-    genai.configure(api_key=new_key)
+    genai.configure(api_key=api_keys[current_key_index])
     return True
 
 def get_current_time():
-    return datetime.datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
+    tz = pytz.timezone(TIMEZONE)
+    return datetime.datetime.now(tz).strftime("%A, %B %d, %Y at %I:%M %p %Z")
+
+def get_date_range(date_str, days=1):
+    """Calculates start/end strings with Timezone support."""
+    tz = pytz.timezone(TIMEZONE)
+    now = datetime.datetime.now(tz)
+    
+    if date_str.lower() == "today":
+        start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif date_str.lower() == "tomorrow":
+        start_dt = (now + datetime.timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        try:
+            dt = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+            start_dt = tz.localize(dt)
+        except:
+            return None, None
+
+    end_dt = start_dt + datetime.timedelta(days=days)
+    return start_dt.isoformat(), end_dt.isoformat()
 
 # --- TOOLS ---
 
 def list_upcoming_events(max_results: float = 50):
-    """
-    Fetches a list of ALL upcoming events (default next 50).
-    Useful when the user asks 'What is on my calendar?' without a specific date.
-    """
+    """Fetches next 50 events starting from NOW."""
     try:
-        print(f"👀 Fetching next {int(max_results)} events...")
-        now = datetime.datetime.utcnow().isoformat() + 'Z' # 'Z' indicates UTC time
+        tz = pytz.timezone(TIMEZONE)
+        now = datetime.datetime.now(tz).isoformat()
         
         events_result = calendar_service.events().list(
             calendarId=CALENDAR_ID,
@@ -115,35 +126,25 @@ def list_upcoming_events(max_results: float = 50):
         ).execute()
         
         events = events_result.get('items', [])
-        if not events:
-            return "No upcoming events found on the calendar."
+        if not events: return "No upcoming events found."
 
         text = "📅 Upcoming Events:\n"
         for event in events:
             start = event['start'].get('dateTime', event['start'].get('date'))
             summary = event.get('summary', 'No Title')
             text += f"- {start}: {summary} (ID: {event['id']})\n"
-        
         return text
-    except Exception as e:
-        return f"Error fetching events: {str(e)}"
+    except Exception as e: return f"Error fetching events: {str(e)}"
 
 def check_schedule(date_str: str = "today"):
-    """Reads the calendar for a specific day/range."""
     try:
-        print(f"👀 Checking schedule for {date_str}...")
-        now = datetime.datetime.now()
-        if date_str.lower() == "today":
-            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        elif date_str.lower() == "tomorrow":
-            start = now.replace(hour=0, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)
-        else:
-            try: start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            except: return "Error: Date must be YYYY-MM-DD, 'today', or 'tomorrow'."
+        start_iso, end_iso = get_date_range(date_str)
+        if not start_iso: return "Error: Date must be YYYY-MM-DD, 'today', or 'tomorrow'."
+
+        print(f"👀 Checking schedule from {start_iso} to {end_iso}...")
         
-        end = start + datetime.timedelta(days=1)
         events_result = calendar_service.events().list(
-            calendarId=CALENDAR_ID, timeMin=start.isoformat() + 'Z', timeMax=end.isoformat() + 'Z', singleEvents=True, orderBy='startTime'
+            calendarId=CALENDAR_ID, timeMin=start_iso, timeMax=end_iso, singleEvents=True, orderBy='startTime'
         ).execute()
         
         events = events_result.get('items', [])
@@ -159,14 +160,22 @@ def check_schedule(date_str: str = "today"):
 def add_to_schedule(summary: str, date_time: str, item_type: str, category: str, notes: str = "", duration_hours: float = 1.0):
     try:
         print(f"📝 Adding to schedule: {summary}")
-        start_time = datetime.datetime.fromisoformat(date_time)
+        try:
+            start_time = datetime.datetime.fromisoformat(date_time)
+        except:
+            start_time = datetime.datetime.strptime(date_time, "%Y-%m-%dT%H:%M:%S")
+
+        if start_time.tzinfo is None:
+            tz = pytz.timezone(TIMEZONE)
+            start_time = tz.localize(start_time)
+
         end_time = start_time + datetime.timedelta(hours=duration_hours)
         
         event = {
             'summary': f"[{category}] {summary}",
             'description': f"Type: {item_type}\nNotes: {notes}",
-            'start': {'dateTime': start_time.isoformat(), 'timeZone': 'America/New_York'},
-            'end': {'dateTime': end_time.isoformat(), 'timeZone': 'America/New_York'},
+            'start': {'dateTime': start_time.isoformat(), 'timeZone': TIMEZONE},
+            'end': {'dateTime': end_time.isoformat(), 'timeZone': TIMEZONE},
         }
         calendar_service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
 
@@ -180,32 +189,49 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
     except Exception as e: return f"Error adding task: {str(e)}"
 
 def remove_task(keyword: str, date_str: str = "today"):
+    """
+    Robust removal using Google's native search 'q' parameter.
+    Searches a 48-hour window to handle timezone edge cases.
+    """
     try:
-        print(f"🗑️ Removing task: {keyword}")
-        now = datetime.datetime.now()
-        if date_str == "today": start = now.replace(hour=0, minute=0, second=0)
-        elif date_str == "tomorrow": start = now.replace(hour=0, minute=0, second=0) + datetime.timedelta(days=1)
-        else: start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-        end = start + datetime.timedelta(days=1)
+        # SEARCH 2 DAYS to be safe (Today + Tomorrow)
+        start_iso, end_iso = get_date_range(date_str, days=2)
+        if not start_iso: return "Error: Invalid date."
 
-        events = calendar_service.events().list(
-            calendarId=CALENDAR_ID, timeMin=start.isoformat() + 'Z', timeMax=end.isoformat() + 'Z', singleEvents=True
-        ).execute().get('items', [])
+        print(f"🗑️ Searching for '{keyword}' starting {start_iso}...")
 
-        deleted = 0
-        for event in events:
-            if keyword.lower() in event.get('summary', '').lower():
-                calendar_service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
-                deleted += 1
+        # Use 'q' parameter for native text search
+        events_result = calendar_service.events().list(
+            calendarId=CALENDAR_ID, 
+            timeMin=start_iso, 
+            timeMax=end_iso, 
+            q=keyword, # <--- KEY FIX: Native Search
+            singleEvents=True
+        ).execute()
+
+        events = events_result.get('items', [])
+
+        if not events:
+            return f"No events found matching '{keyword}' on or after {date_str}."
+
+        deleted_count = 0
+        deleted_titles = []
         
-        if deleted == 0: return f"No events found matching '{keyword}'."
-        return f"Success: Deleted {deleted} event(s)."
+        for event in events:
+            title = event.get('summary', 'No Title')
+            print(f"   found match: {title} (ID: {event['id']})")
+            
+            # Delete it
+            calendar_service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
+            deleted_count += 1
+            deleted_titles.append(title)
+        
+        return f"Success: Deleted {deleted_count} event(s): {', '.join(deleted_titles)}"
     except Exception as e: return f"Error removing: {str(e)}"
 
 def send_notification(message: str):
     if not email_user or not email_pass: return "Error: Email credentials not configured."
     try:
-        print(f"📧 Sending email...")
         msg = MIMEText(message)
         msg['Subject'] = "Receptionist Alert"
         msg['From'] = email_user
@@ -222,7 +248,7 @@ tools = [add_to_schedule, check_schedule, list_upcoming_events, remove_task, sen
 tool_map = {
     'add_to_schedule': add_to_schedule,
     'check_schedule': check_schedule,
-    'list_upcoming_events': list_upcoming_events, # Added here
+    'list_upcoming_events': list_upcoming_events, 
     'remove_task': remove_task,
     'send_notification': send_notification
 }
@@ -234,19 +260,16 @@ def process_message(user_input, chat_history):
 
     while attempts < max_retries:
         try:
-            # 1. Setup
             system_instruction = "You are a receptionist. Use tools to manage the schedule."
             model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
             chat = model.start_chat(enable_automatic_function_calling=False)
             
-            # 2. Inject Date
-            date_context = f" [System Info: Current Time is {get_current_time()}]"
+            # Inject Timezone-Aware Context
+            date_context = f" [System Info: Current NY Time is {get_current_time()}]"
             augmented_input = user_input + date_context
             
-            # 3. Send
             response = chat.send_message(augmented_input)
             
-            # 4. Manual Dispatch
             if not response.parts: return "⚠️ Error: AI returned empty response."
                 
             part = response.candidates[0].content.parts[0]
