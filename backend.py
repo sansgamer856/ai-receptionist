@@ -6,7 +6,6 @@ from email.mime.text import MIMEText
 from typing import Literal
 
 import google.generativeai as genai
-from google.ai.generativelanguage_v1beta.types import content # Crucial for manual responses
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
@@ -14,7 +13,7 @@ from dotenv import load_dotenv
 # --- CONFIGURATION ---
 load_dotenv()
 
-# Use the stable model
+# MODEL: Using 1.5 Flash for stability and speed
 MODEL_NAME = 'gemini-2.5-flash' 
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I' 
 CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com' 
@@ -23,6 +22,7 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapi
 SERVICE_ACCOUNT_FILE = 'credentials.json'
 
 # --- AUTHENTICATION ---
+# (Handles both Cloud and Local environments)
 try:
     import streamlit as st
     if "gcp_service_account" in st.secrets:
@@ -51,13 +51,17 @@ def get_current_time():
     return datetime.datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
 
 # --- TOOL DEFINITIONS ---
+
 def check_schedule(date_str: str = "today"):
+    """Reads the calendar for a specific day."""
     try:
         print(f"👀 Checking schedule for {date_str}...")
         now = datetime.datetime.now()
         if date_str == "today": start = now.replace(hour=0, minute=0, second=0)
         elif date_str == "tomorrow": start = now.replace(hour=0, minute=0, second=0) + datetime.timedelta(days=1)
-        else: start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+        else: 
+            try: start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+            except: return "Error: Date must be YYYY-MM-DD, 'today', or 'tomorrow'."
         
         end = start + datetime.timedelta(days=1)
         
@@ -70,11 +74,13 @@ def check_schedule(date_str: str = "today"):
 
         text = f"Schedule for {date_str}:\n"
         for event in events:
-            text += f"- {event['start'].get('dateTime', event['start'].get('date'))}: {event.get('summary', 'No Title')}\n"
+            time_str = event['start'].get('dateTime', event['start'].get('date'))
+            text += f"- {time_str}: {event.get('summary', 'No Title')} (ID: {event['id']})\n"
         return text
-    except Exception as e: return f"Error: {str(e)}"
+    except Exception as e: return f"Error checking schedule: {str(e)}"
 
 def add_to_schedule(summary: str, date_time: str, item_type: str, category: str, notes: str = "", duration_hours: float = 1.0):
+    """Adds item to Calendar and Sheets."""
     try:
         print(f"📝 Adding to schedule: {summary}")
         start_time = datetime.datetime.fromisoformat(date_time)
@@ -96,17 +102,13 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
             spreadsheetId=SPREADSHEET_ID, range="WeeklyOverhaul!A:F", valueInputOption="USER_ENTERED", body={'values': values}
         ).execute()
 
-        return "Success: Item added to Calendar and Sheets."
-    except Exception as e: 
-        print(f"❌ Error in add_to_schedule: {e}")
-        return f"Error: {str(e)}"
+        return f"Success: Added '{summary}' to schedule."
+    except Exception as e: return f"Error adding: {str(e)}"
 
 def remove_task(keyword: str, date_str: str = "today"):
+    """Removes a task from Calendar by keyword."""
     try:
-        print(f"🗑️ Attempting to remove task matching: {keyword}")
-        schedule_info = check_schedule(date_str)
-        # (Simplified logic - in production use IDs)
-        # Rerunning list to get IDs
+        print(f"🗑️ Removing task: {keyword}")
         now = datetime.datetime.now()
         if date_str == "today": start = now.replace(hour=0, minute=0, second=0)
         elif date_str == "tomorrow": start = now.replace(hour=0, minute=0, second=0) + datetime.timedelta(days=1)
@@ -122,11 +124,14 @@ def remove_task(keyword: str, date_str: str = "today"):
             if keyword.lower() in event.get('summary', '').lower():
                 calendar_service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
                 deleted += 1
-        return f"Deleted {deleted} event(s)."
-    except Exception as e: return f"Error: {str(e)}"
+        
+        if deleted == 0: return f"No events found matching '{keyword}'."
+        return f"Success: Deleted {deleted} event(s)."
+    except Exception as e: return f"Error removing: {str(e)}"
 
 def send_notification(message: str):
-    if not email_user or not email_pass: return "Email not configured."
+    """Sends email notification."""
+    if not email_user or not email_pass: return "Error: Email credentials not configured in .env."
     try:
         print(f"📧 Sending email...")
         msg = MIMEText(message)
@@ -136,39 +141,40 @@ def send_notification(message: str):
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
             s.login(email_user, email_pass)
             s.send_message(msg)
-        return "Email sent."
+        return "Notification sent."
     except Exception as e: return f"Email failed: {e}"
 
 # --- REGISTER TOOLS ---
 tools = [add_to_schedule, check_schedule, remove_task, send_notification]
 
-# --- AI BRAIN (MANUAL CONTROL) ---
+# --- AI BRAIN (ROBUST MANUAL DISPATCH) ---
 def process_message(user_input, chat_history):
     try:
         # 1. SETUP
         system_instruction = f"You are a receptionist. Current Time: {get_current_time()}. Use tools to modify the schedule."
         model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
         
-        # Disable auto-function calling so we can see what happens
+        # Disable auto-execution to prevent 'Silence' errors and 'Text' parsing errors
         chat = model.start_chat(enable_automatic_function_calling=False)
         
         # 2. SEND MESSAGE
         response = chat.send_message(user_input)
         
-        # 3. MANUAL CHECK: DID GEMINI CALL A FUNCTION?
-        # We look at the 'parts' of the response
-        try:
-            function_call = response.candidates[0].content.parts[0].function_call
-        except (IndexError, AttributeError):
-            function_call = None
+        # 3. MANUAL DISPATCH (The Fix)
+        # We check specific parts instead of generic conversion
+        if not response.parts:
+            return "⚠️ Error: AI returned empty response."
 
-        if function_call:
+        # Check if the AI wants to call a function
+        first_part = response.parts[0]
+        
+        if first_part.function_call:
             # 🤖 A Tool was triggered!
-            func_name = function_call.name
-            args = dict(function_call.args)
+            fc = first_part.function_call
+            func_name = fc.name
+            args = dict(fc.args)
             
-            print(f"🤖 Gemini Request: {func_name}")
-            print(f"📦 Arguments: {args}")
+            print(f"🤖 Gemini Request: {func_name} | Args: {args}")
 
             # Execute Python Code
             result = "Error: Function not found"
@@ -181,22 +187,24 @@ def process_message(user_input, chat_history):
             elif func_name == "send_notification":
                 result = send_notification(**args)
             
-            print(f"✅ Result: {result}")
+            print(f"✅ Tool Result: {result}")
 
-            # Send Result Back to Gemini
-            # We must construct a specific FunctionResponse object
-            function_response_part = content.Part(
-                function_response=content.FunctionResponse(
+            # Send Result Back to Gemini using Correct Proto
+            # This constructs the response object manually to avoid SDK bugs
+            from google.ai.generativelanguage import FunctionResponse, Part
+            
+            response_part = Part(
+                function_response=FunctionResponse(
                     name=func_name,
                     response={"result": result}
                 )
             )
             
-            final_response = chat.send_message([function_response_part])
+            final_response = chat.send_message([response_part])
             return final_response.text
 
         else:
-            # No tool called, just text
+            # No tool called, just return the text
             return response.text
 
     except Exception as e:
