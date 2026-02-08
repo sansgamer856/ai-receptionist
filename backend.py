@@ -15,7 +15,7 @@ load_dotenv()
 
 # MODEL: Updated to the latest Flash Lite preview (closest to your request)
 # If this gives a 404, switch to 'gemini-2.0-flash' or 'gemini-1.5-flash'
-MODEL_NAME = 'gemini-2.0-flash-lite-preview-02-05'
+MODEL_NAME = 'gemini-2.5-flash-lite'
 
 # UPDATED IDs
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
@@ -232,3 +232,4 @@ def process_message(user_input, chat_history):
     except Exception as e:
         traceback.print_exc()
         return f"⚠️ System Error: {str(e)}"
+
