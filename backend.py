@@ -3,9 +3,10 @@ import datetime
 import traceback
 import smtplib
 from email.mime.text import MIMEText
-from typing import Literal, Optional
+from typing import Literal
 
 import google.generativeai as genai
+from google.ai.generativelanguage_v1beta.types import content # Crucial for manual responses
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
@@ -13,17 +14,15 @@ from dotenv import load_dotenv
 # --- CONFIGURATION ---
 load_dotenv()
 
-# MODEL CHOICE: We use the Preview Flash model for maximum efficiency
-MODEL_NAME = 'gemini-2.5-flash-lite' # Using 2.0 Flash as the stable placeholder for "3.0 Preview"
-SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
+# Use the stable model
+MODEL_NAME = 'gemini-2.5-flash' 
+SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I' 
 CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com' 
-MAX_HISTORY = 15 # Memory limit
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/calendar']
 SERVICE_ACCOUNT_FILE = 'credentials.json'
 
 # --- AUTHENTICATION ---
-# Check if running on Cloud (Streamlit Secrets) or Local
 try:
     import streamlit as st
     if "gcp_service_account" in st.secrets:
@@ -31,8 +30,8 @@ try:
             st.secrets["gcp_service_account"], scopes=SCOPES
         )
         api_key = st.secrets["GOOGLE_API_KEY"]
-        email_user = st.secrets["EMAIL_SENDER"]
-        email_pass = st.secrets["EMAIL_PASSWORD"]
+        email_user = st.secrets.get("EMAIL_SENDER")
+        email_pass = st.secrets.get("EMAIL_PASSWORD")
     else:
         raise Exception("Local run")
 except Exception:
@@ -43,80 +42,45 @@ except Exception:
     email_user = os.getenv("EMAIL_SENDER")
     email_pass = os.getenv("EMAIL_PASSWORD")
 
-# Connect Services
 sheets_service = build('sheets', 'v4', credentials=creds)
 calendar_service = build('calendar', 'v3', credentials=creds)
 genai.configure(api_key=api_key)
 
 # --- HELPER FUNCTIONS ---
-
 def get_current_time():
-    """Returns the current time to help the AI understand 'today' or 'tomorrow'."""
     return datetime.datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
 
-# --- TOOLS ---
-
+# --- TOOL DEFINITIONS ---
 def check_schedule(date_str: str = "today"):
-    """
-    Reads the Google Calendar for a specific date or range.
-    Args:
-        date_str: 'today', 'tomorrow', or a specific date (YYYY-MM-DD).
-    """
     try:
+        print(f"👀 Checking schedule for {date_str}...")
         now = datetime.datetime.now()
+        if date_str == "today": start = now.replace(hour=0, minute=0, second=0)
+        elif date_str == "tomorrow": start = now.replace(hour=0, minute=0, second=0) + datetime.timedelta(days=1)
+        else: start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
         
-        if date_str == "today":
-            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        elif date_str == "tomorrow":
-            start = now.replace(hour=0, minute=0, second=0, microsecond=0) + datetime.timedelta(days=1)
-        else:
-            # Try to parse YYYY-MM-DD
-            try:
-                start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-            except:
-                return "Error: Please use 'today', 'tomorrow', or 'YYYY-MM-DD' format."
-
         end = start + datetime.timedelta(days=1)
         
-        print(f"👀 Checking schedule for {start.date()}...")
-
         events_result = calendar_service.events().list(
-            calendarId=CALENDAR_ID, 
-            timeMin=start.isoformat() + 'Z',
-            timeMax=end.isoformat() + 'Z',
-            singleEvents=True,
-            orderBy='startTime'
+            calendarId=CALENDAR_ID, timeMin=start.isoformat() + 'Z', timeMax=end.isoformat() + 'Z', singleEvents=True, orderBy='startTime'
         ).execute()
         
         events = events_result.get('items', [])
+        if not events: return f"No events found for {date_str}."
 
-        if not events:
-            return f"No events found for {date_str}."
-
-        schedule_text = f"Schedule for {date_str}:\n"
+        text = f"Schedule for {date_str}:\n"
         for event in events:
-            start = event['start'].get('dateTime', event['start'].get('date'))
-            summary = event.get('summary', 'No Title')
-            schedule_text += f"- {start}: {summary} (ID: {event['id']})\n"
-            
-        return schedule_text
+            text += f"- {event['start'].get('dateTime', event['start'].get('date'))}: {event.get('summary', 'No Title')}\n"
+        return text
+    except Exception as e: return f"Error: {str(e)}"
 
-    except Exception as e:
-        return f"Error checking schedule: {str(e)}"
-
-def add_to_schedule(
-    summary: str,
-    date_time: str,
-    item_type: Literal["Assignment", "Meeting", "Research", "Exam", "To-Do Item"],
-    category: Literal["Classes", "Combat Robotics", "Rocket Propulsion", "IEEE", "Research", "Personal"],
-    notes: str = "",
-    duration_hours: float = 1.0
-):
-    """Adds a new item to the user's Google Sheet and Calendar."""
+def add_to_schedule(summary: str, date_time: str, item_type: str, category: str, notes: str = "", duration_hours: float = 1.0):
     try:
-        # Calendar
+        print(f"📝 Adding to schedule: {summary}")
         start_time = datetime.datetime.fromisoformat(date_time)
         end_time = start_time + datetime.timedelta(hours=duration_hours)
+        
+        # Calendar
         event = {
             'summary': f"[{category}] {summary}",
             'description': f"Type: {item_type}\nNotes: {notes}",
@@ -128,102 +92,113 @@ def add_to_schedule(
         # Sheets
         formatted_date = start_time.strftime("%m/%d/%Y %H:%M")
         values = [[formatted_date, summary, item_type, category, notes, False]]
-        body = {'values': values}
         sheets_service.spreadsheets().values().append(
-            spreadsheetId=SPREADSHEET_ID, range="WeeklyOverhaulA:F", valueInputOption="USER_ENTERED", body=body
+            spreadsheetId=SPREADSHEET_ID, range="WeeklyOverhaul!A:F", valueInputOption="USER_ENTERED", body={'values': values}
         ).execute()
 
-        return f"Success: Added '{summary}' to schedule."
-    except Exception as e:
-        return f"Error adding task: {str(e)}"
+        return "Success: Item added to Calendar and Sheets."
+    except Exception as e: 
+        print(f"❌ Error in add_to_schedule: {e}")
+        return f"Error: {str(e)}"
 
 def remove_task(keyword: str, date_str: str = "today"):
-    """
-    Removes a task from Google Calendar based on a keyword and date.
-    Note: Does not currently remove from Sheets (safer to keep record).
-    """
     try:
-        # Reuse logic to find events
-        schedule_dump = check_schedule(date_str)
-        if "No events" in schedule_dump or "Error" in schedule_dump:
-            return "Could not find any events to remove."
-
-        # Parse the dump to find the ID (Simplified logic)
-        # In a real app, we would query the API again, but let's do a search
+        print(f"🗑️ Attempting to remove task matching: {keyword}")
+        schedule_info = check_schedule(date_str)
+        # (Simplified logic - in production use IDs)
+        # Rerunning list to get IDs
         now = datetime.datetime.now()
-        if date_str == "today": start = now
-        elif date_str == "tomorrow": start = now + datetime.timedelta(days=1)
+        if date_str == "today": start = now.replace(hour=0, minute=0, second=0)
+        elif date_str == "tomorrow": start = now.replace(hour=0, minute=0, second=0) + datetime.timedelta(days=1)
         else: start = datetime.datetime.strptime(date_str, "%Y-%m-%d")
-        
         end = start + datetime.timedelta(days=1)
-        
-        events_result = calendar_service.events().list(
+
+        events = calendar_service.events().list(
             calendarId=CALENDAR_ID, timeMin=start.isoformat() + 'Z', timeMax=end.isoformat() + 'Z', singleEvents=True
-        ).execute()
-        
-        deleted_count = 0
-        for event in events_result.get('items', []):
+        ).execute().get('items', [])
+
+        deleted = 0
+        for event in events:
             if keyword.lower() in event.get('summary', '').lower():
                 calendar_service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
-                deleted_count += 1
-        
-        if deleted_count > 0:
-            return f"Successfully deleted {deleted_count} event(s) matching '{keyword}'."
-        else:
-            return f"No events found containing '{keyword}' on that date."
-
-    except Exception as e:
-        return f"Error removing task: {str(e)}"
+                deleted += 1
+        return f"Deleted {deleted} event(s)."
+    except Exception as e: return f"Error: {str(e)}"
 
 def send_notification(message: str):
-    """Sends an email notification to the user."""
-    if not email_user or not email_pass:
-        return "Error: Email credentials not set in .env."
-    
+    if not email_user or not email_pass: return "Email not configured."
     try:
+        print(f"📧 Sending email...")
         msg = MIMEText(message)
-        msg['Subject'] = "🤖 Receptionist Alert"
+        msg['Subject'] = "Receptionist Alert"
         msg['From'] = email_user
-        msg['To'] = email_user # Send to self
-
-        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
-            server.login(email_user, email_pass)
-            server.send_message(msg)
-        
-        return "Notification sent successfully."
-    except Exception as e:
-        return f"Failed to send notification: {str(e)}"
+        msg['To'] = email_user
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as s:
+            s.login(email_user, email_pass)
+            s.send_message(msg)
+        return "Email sent."
+    except Exception as e: return f"Email failed: {e}"
 
 # --- REGISTER TOOLS ---
 tools = [add_to_schedule, check_schedule, remove_task, send_notification]
 
-# --- AI BRAIN ---
+# --- AI BRAIN (MANUAL CONTROL) ---
 def process_message(user_input, chat_history):
     try:
-        # 1. TOKEN CHECK / PRE-FLIGHT
-        # If history is huge, we slice it (handled in app.py, but we double check here)
-        if not user_input or len(user_input.strip()) < 2:
-            return "Please provide a valid command."
-
-        # 2. Inject Context (Time)
-        system_instruction = f"You are a personal receptionist. Current Time: {get_current_time()}. Use tools to manage the user's life."
-        
+        # 1. SETUP
+        system_instruction = f"You are a receptionist. Current Time: {get_current_time()}. Use tools to modify the schedule."
         model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
-        chat = model.start_chat(enable_automatic_function_calling=True)
         
-        # 3. Feed History (Optimized)
-        # We manually rebuild history for the SDK if needed, but for simplicity
-        # we often just send the current prompt + context if not using the chat object for long term
-        # Here we assume chat_history is passed as a list of dicts: [{'role': 'user', 'parts': [...]}]
+        # Disable auto-function calling so we can see what happens
+        chat = model.start_chat(enable_automatic_function_calling=False)
         
-        # (Optional) Rehydrate chat object with history if supported by SDK version
-        # chat.history = chat_history 
-        
+        # 2. SEND MESSAGE
         response = chat.send_message(user_input)
-        return response.text
+        
+        # 3. MANUAL CHECK: DID GEMINI CALL A FUNCTION?
+        # We look at the 'parts' of the response
+        try:
+            function_call = response.candidates[0].content.parts[0].function_call
+        except (IndexError, AttributeError):
+            function_call = None
 
-    except Exception:
+        if function_call:
+            # 🤖 A Tool was triggered!
+            func_name = function_call.name
+            args = dict(function_call.args)
+            
+            print(f"🤖 Gemini Request: {func_name}")
+            print(f"📦 Arguments: {args}")
+
+            # Execute Python Code
+            result = "Error: Function not found"
+            if func_name == "add_to_schedule":
+                result = add_to_schedule(**args)
+            elif func_name == "check_schedule":
+                result = check_schedule(**args)
+            elif func_name == "remove_task":
+                result = remove_task(**args)
+            elif func_name == "send_notification":
+                result = send_notification(**args)
+            
+            print(f"✅ Result: {result}")
+
+            # Send Result Back to Gemini
+            # We must construct a specific FunctionResponse object
+            function_response_part = content.Part(
+                function_response=content.FunctionResponse(
+                    name=func_name,
+                    response={"result": result}
+                )
+            )
+            
+            final_response = chat.send_message([function_response_part])
+            return final_response.text
+
+        else:
+            # No tool called, just text
+            return response.text
+
+    except Exception as e:
         traceback.print_exc()
-
-        return "⚠️ Error processing request."
-
+        return f"⚠️ System Error: {str(e)}"
