@@ -14,9 +14,8 @@ from dotenv import load_dotenv
 # --- CONFIGURATION ---
 load_dotenv()
 
-# MODEL: Updated to the latest fast model
-# If you have specific access to 'gemini-3-flash-preview', change this string.
-MODEL_NAME = 'gemini-3.0-flash-preview' 
+# MODEL
+MODEL_NAME = 'gemini-3-flash-preview' 
 
 # IDs
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
@@ -30,10 +29,9 @@ SERVICE_ACCOUNT_FILE = 'credentials.json'
 api_keys = []
 current_key_index = 0
 
-# 1. Load keys from Streamlit Secrets or .env
+# Load keys
 try:
     import streamlit as st
-    # Check for keys named API_KEY_1, API_KEY_2, etc.
     i = 1
     while True:
         key = st.secrets.get(f"API_KEY_{i}")
@@ -41,11 +39,9 @@ try:
         api_keys.append(key)
         i += 1
     
-    # Fallback to single key if numbered ones aren't found
     if not api_keys and "GOOGLE_API_KEY" in st.secrets:
         api_keys.append(st.secrets["GOOGLE_API_KEY"])
 
-    # Load Service Account
     if "gcp_service_account" in st.secrets:
         creds = service_account.Credentials.from_service_account_info(
             st.secrets["gcp_service_account"], scopes=SCOPES
@@ -56,7 +52,6 @@ try:
         raise Exception("Local run")
 
 except Exception:
-    # Local .env fallback
     i = 1
     while True:
         key = os.getenv(f"API_KEY_{i}")
@@ -74,12 +69,11 @@ except Exception:
     email_pass = os.getenv("EMAIL_PASSWORD")
 
 if not api_keys:
-    raise ValueError("❌ No API Keys found! Please set API_KEY_1, API_KEY_2 etc. in secrets.")
+    raise ValueError("❌ No API Keys found! Please set API_KEY_1, etc.")
 
 print(f"🔑 Loaded {len(api_keys)} API Keys. Starting with Key #1.")
 genai.configure(api_key=api_keys[0])
 
-# Google Services
 sheets_service = build('sheets', 'v4', credentials=creds)
 calendar_service = build('calendar', 'v3', credentials=creds)
 
@@ -89,12 +83,12 @@ def switch_api_key():
     """Switches to the next available API key."""
     global current_key_index
     if len(api_keys) <= 1:
-        print("⚠️ Quota hit, but only 1 key available. Cannot switch.")
+        print("⚠️ Quota hit, but only 1 key available.")
         return False
     
     current_key_index = (current_key_index + 1) % len(api_keys)
     new_key = api_keys[current_key_index]
-    print(f"🔄 Quota exceeded. Switching to API Key #{current_key_index + 1}...")
+    print(f"🔄 Switching to API Key #{current_key_index + 1}...")
     genai.configure(api_key=new_key)
     return True
 
@@ -102,7 +96,40 @@ def get_current_time():
     return datetime.datetime.now().strftime("%A, %B %d, %Y at %I:%M %p")
 
 # --- TOOLS ---
+
+def list_upcoming_events(max_results: float = 50):
+    """
+    Fetches a list of ALL upcoming events (default next 50).
+    Useful when the user asks 'What is on my calendar?' without a specific date.
+    """
+    try:
+        print(f"👀 Fetching next {int(max_results)} events...")
+        now = datetime.datetime.utcnow().isoformat() + 'Z' # 'Z' indicates UTC time
+        
+        events_result = calendar_service.events().list(
+            calendarId=CALENDAR_ID,
+            timeMin=now,
+            maxResults=int(max_results),
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        
+        events = events_result.get('items', [])
+        if not events:
+            return "No upcoming events found on the calendar."
+
+        text = "📅 Upcoming Events:\n"
+        for event in events:
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            summary = event.get('summary', 'No Title')
+            text += f"- {start}: {summary} (ID: {event['id']})\n"
+        
+        return text
+    except Exception as e:
+        return f"Error fetching events: {str(e)}"
+
 def check_schedule(date_str: str = "today"):
+    """Reads the calendar for a specific day/range."""
     try:
         print(f"👀 Checking schedule for {date_str}...")
         now = datetime.datetime.now()
@@ -189,36 +216,38 @@ def send_notification(message: str):
         return "Notification sent."
     except Exception as e: return f"Email failed: {e}"
 
-tools = [add_to_schedule, check_schedule, remove_task, send_notification]
+# --- REGISTER TOOLS ---
+tools = [add_to_schedule, check_schedule, list_upcoming_events, remove_task, send_notification]
+
 tool_map = {
     'add_to_schedule': add_to_schedule,
     'check_schedule': check_schedule,
+    'list_upcoming_events': list_upcoming_events, # Added here
     'remove_task': remove_task,
     'send_notification': send_notification
 }
 
-# --- AI BRAIN (WITH ROTATION LOGIC) ---
+# --- AI BRAIN ---
 def process_message(user_input, chat_history):
-    max_retries = len(api_keys) + 1  # Try every key at least once
+    max_retries = len(api_keys) + 1 
     attempts = 0
 
     while attempts < max_retries:
         try:
-            # 1. Setup Model
-            system_instruction = f"You are a helpful receptionist. Use tools to manage the schedule."
+            # 1. Setup
+            system_instruction = "You are a receptionist. Use tools to manage the schedule."
             model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
             chat = model.start_chat(enable_automatic_function_calling=False)
             
             # 2. Inject Date
-            date_context = f" [System Info: The current date and time is {get_current_time()}]"
+            date_context = f" [System Info: Current Time is {get_current_time()}]"
             augmented_input = user_input + date_context
             
-            # 3. Send Message
+            # 3. Send
             response = chat.send_message(augmented_input)
             
-            # 4. Handle Response (Manual Dispatch)
-            if not response.parts:
-                return "⚠️ Error: AI returned empty response."
+            # 4. Manual Dispatch
+            if not response.parts: return "⚠️ Error: AI returned empty response."
                 
             part = response.candidates[0].content.parts[0]
             
@@ -249,12 +278,11 @@ def process_message(user_input, chat_history):
                 return response.text
 
         except ResourceExhausted:
-            # ⚠️ 429 ERROR CAUGHT HERE
             print("⚠️ API Quota Exceeded!")
             if switch_api_key():
                 attempts += 1
-                time.sleep(1) # Brief pause before retry
-                continue # Restart the loop with the new key
+                time.sleep(1)
+                continue
             else:
                 return "⚠️ Error: All API keys have exhausted their quota."
         
@@ -262,4 +290,4 @@ def process_message(user_input, chat_history):
             traceback.print_exc()
             return f"⚠️ System Error: {str(e)}"
     
-    return "⚠️ Error: Request failed after trying all keys."
+    return "⚠️ Error: Request failed."
