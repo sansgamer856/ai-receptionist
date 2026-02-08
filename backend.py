@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL
-MODEL_NAME = 'gemini-2.0-flash' 
+MODEL_NAME = 'gemini-3-flash-preview' 
 
 # IDs (ENSURE CALENDAR_ID IS CORRECT!)
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
