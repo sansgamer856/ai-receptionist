@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL
-MODEL_NAME = 'gemini-3-flash-preview'
+MODEL_NAME = 'gemini-3-flash-preview' 
 
 # IDs
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
@@ -90,7 +90,8 @@ def get_current_time():
     tz = pytz.timezone(TIMEZONE)
     return datetime.datetime.now(tz).strftime("%A, %B %d, %Y at %I:%M %p %Z")
 
-def get_date_range(date_str, days=1):
+def get_date_range(date_str):
+    """Calculates strict start/end for a specific day."""
     tz = pytz.timezone(TIMEZONE)
     now = datetime.datetime.now(tz)
     
@@ -105,7 +106,8 @@ def get_date_range(date_str, days=1):
         except:
             return None, None
 
-    end_dt = start_dt + datetime.timedelta(days=days)
+    # End is exactly 24 hours later
+    end_dt = start_dt + datetime.timedelta(days=1)
     return start_dt.isoformat(), end_dt.isoformat()
 
 # --- TOOLS ---
@@ -169,25 +171,54 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
         return f"Success: Added '{summary}' to schedule."
     except Exception as e: return f"Error adding task: {str(e)}"
 
-def remove_task(keyword: str, date_str: str = "today"):
+def delete_events(date_str: str = "today", keyword: str = ""):
+    """
+    Deletes events on a specific date. 
+    - If keyword is empty or 'ALL', deletes ALL events on that day.
+    - If keyword is provided, only deletes events containing that text.
+    """
     try:
-        start_iso, end_iso = get_date_range(date_str, days=2)
+        start_iso, end_iso = get_date_range(date_str)
         if not start_iso: return "Error: Invalid date."
-        print(f"🗑️ Searching for '{keyword}' starting {start_iso}...")
+
+        print(f"🗑️ Deleting events from {start_iso} to {end_iso} | Keyword: '{keyword}'")
+
+        # 1. Fetch ALL events for the day (No 'q' filter yet)
         events_result = calendar_service.events().list(
-            calendarId=CALENDAR_ID, timeMin=start_iso, timeMax=end_iso, q=keyword, singleEvents=True
+            calendarId=CALENDAR_ID, 
+            timeMin=start_iso, 
+            timeMax=end_iso, 
+            singleEvents=True
         ).execute()
+
         events = events_result.get('items', [])
-        if not events: return f"No events found matching '{keyword}' on or after {date_str}."
+
+        if not events:
+            return f"No events found on {date_str} to delete."
 
         deleted_count = 0
         deleted_titles = []
+        
+        # 2. Filter and Delete in Python
         for event in events:
             title = event.get('summary', 'No Title')
-            print(f"   Deleting: {title}")
-            calendar_service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
-            deleted_count += 1
-            deleted_titles.append(title)
+            should_delete = False
+            
+            # If keyword is "ALL", empty, or None -> Delete everything
+            if not keyword or keyword.upper() == "ALL" or keyword.strip() == "":
+                should_delete = True
+            elif keyword.lower() in title.lower():
+                should_delete = True
+            
+            if should_delete:
+                print(f"   ❌ Deleting: {title} ({event['id']})")
+                calendar_service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
+                deleted_count += 1
+                deleted_titles.append(title)
+        
+        if deleted_count == 0:
+            return f"Found {len(events)} events on {date_str}, but none matched '{keyword}'."
+            
         return f"Success: Deleted {deleted_count} event(s): {', '.join(deleted_titles)}"
     except Exception as e: return f"Error removing: {str(e)}"
 
@@ -204,23 +235,25 @@ def send_notification(message: str):
         return "Notification sent."
     except Exception as e: return f"Email failed: {e}"
 
-tools = [add_to_schedule, check_schedule, list_upcoming_events, remove_task, send_notification]
+# --- REGISTER TOOLS ---
+tools = [add_to_schedule, check_schedule, list_upcoming_events, delete_events, send_notification]
+
 tool_map = {
     'add_to_schedule': add_to_schedule,
     'check_schedule': check_schedule,
     'list_upcoming_events': list_upcoming_events, 
-    'remove_task': remove_task,
+    'delete_events': delete_events, # Replaced remove_task
     'send_notification': send_notification
 }
 
-# --- AI BRAIN (ROBUST) ---
+# --- AI BRAIN ---
 def process_message(user_input, chat_history):
     max_retries = len(api_keys) + 1 
     attempts = 0
 
     while attempts < max_retries:
         try:
-            system_instruction = "You are a receptionist. Use tools to manage the schedule."
+            system_instruction = "You are a receptionist. Use tools to manage the schedule. When deleting all events, use keyword='ALL'."
             model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
             chat = model.start_chat(enable_automatic_function_calling=False)
             
@@ -229,8 +262,7 @@ def process_message(user_input, chat_history):
             
             response = chat.send_message(augmented_input)
             
-            # --- FIX FOR "Could not convert function_call to text" ---
-            # We must iterate through parts to find the function call.
+            # --- Robust Response Handling ---
             function_call_part = None
             for part in response.parts:
                 if part.function_call:
@@ -257,18 +289,18 @@ def process_message(user_input, chat_history):
                         "response": {"result": result}
                     }
                 }
-                # Send the result back to Gemini to get the final spoken response
                 final_response = chat.send_message(function_response)
                 
-                # Check if final response is safe to convert to text
+                # If the AI is silent, fallback to the tool result
                 try:
-                    return final_response.text
+                    text_response = final_response.text
+                    if not text_response or len(text_response.strip()) < 2:
+                        return f"Action completed. System Report: {result}"
+                    return text_response
                 except ValueError:
-                    # Rare case: Chained tool calls
-                    return "Tool executed successfully."
+                    return f"Action completed. System Report: {result}"
 
             else:
-                # Safe to return text because we confirmed no function calls exist
                 return response.text
 
         except ResourceExhausted:
