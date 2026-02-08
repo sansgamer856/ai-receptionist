@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL: Using 1.5 Flash for stability and speed
-MODEL_NAME = 'gemini-1.5-flash' 
+MODEL_NAME = 'gemini-2.5-flash-lite' 
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
 CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com'
 
@@ -206,3 +206,4 @@ def process_message(user_input, chat_history):
     except Exception as e:
         traceback.print_exc()
         return f"⚠️ System Error: {str(e)}"
+
