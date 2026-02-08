@@ -60,3 +60,26 @@ with st.sidebar:
         st.rerun()
     st.markdown("---")
     st.caption("Connected to: `backend.py`")
+    
+    # --- MEMORY MANAGEMENT ---
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+
+# TOKEN SAVER: Keep only last 15 messages
+if len(st.session_state.messages) > 15:
+    st.session_state.messages = st.session_state.messages[-15:]
+
+# ... (Display loop same as before) ...
+
+if prompt := st.chat_input("Ex: 'What am I doing tomorrow?'"):
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Processing..."):
+            # Pass history (optional, currently backend manages single turn with context)
+            response = backend.process_message(prompt, st.session_state.messages)
+            st.markdown(response)
+            
+    st.session_state.messages.append({"role": "assistant", "content": response})
