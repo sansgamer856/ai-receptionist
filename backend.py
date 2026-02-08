@@ -16,9 +16,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL
-MODEL_NAME = 'gemini-3-flash-preview' 
+MODEL_NAME = 'gemini-3-flash-preview'
 
-# IDs (ENSURE CALENDAR_ID IS CORRECT!)
+# IDs
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
 CALENDAR_ID = 'c_fa9eefe809ded84d84f33c8b11369b569f78d88491d6595b5673ec98a6869fb6@group.calendar.google.com'
 SHEET_RANGE = 'WeeklyOverhaul!A:F'
@@ -91,7 +91,6 @@ def get_current_time():
     return datetime.datetime.now(tz).strftime("%A, %B %d, %Y at %I:%M %p %Z")
 
 def get_date_range(date_str, days=1):
-    """Calculates start/end strings with Timezone support."""
     tz = pytz.timezone(TIMEZONE)
     now = datetime.datetime.now(tz)
     
@@ -110,24 +109,15 @@ def get_date_range(date_str, days=1):
     return start_dt.isoformat(), end_dt.isoformat()
 
 # --- TOOLS ---
-
 def list_upcoming_events(max_results: float = 50):
-    """Fetches next 50 events starting from NOW."""
     try:
         tz = pytz.timezone(TIMEZONE)
         now = datetime.datetime.now(tz).isoformat()
-        
         events_result = calendar_service.events().list(
-            calendarId=CALENDAR_ID,
-            timeMin=now,
-            maxResults=int(max_results),
-            singleEvents=True,
-            orderBy='startTime'
+            calendarId=CALENDAR_ID, timeMin=now, maxResults=int(max_results), singleEvents=True, orderBy='startTime'
         ).execute()
-        
         events = events_result.get('items', [])
         if not events: return "No upcoming events found."
-
         text = "📅 Upcoming Events:\n"
         for event in events:
             start = event['start'].get('dateTime', event['start'].get('date'))
@@ -140,16 +130,12 @@ def check_schedule(date_str: str = "today"):
     try:
         start_iso, end_iso = get_date_range(date_str)
         if not start_iso: return "Error: Date must be YYYY-MM-DD, 'today', or 'tomorrow'."
-
         print(f"👀 Checking schedule from {start_iso} to {end_iso}...")
-        
         events_result = calendar_service.events().list(
             calendarId=CALENDAR_ID, timeMin=start_iso, timeMax=end_iso, singleEvents=True, orderBy='startTime'
         ).execute()
-        
         events = events_result.get('items', [])
         if not events: return f"No events found for {date_str}."
-
         text = f"Schedule for {date_str}:\n"
         for event in events:
             start_t = event['start'].get('dateTime', event['start'].get('date'))
@@ -160,17 +146,14 @@ def check_schedule(date_str: str = "today"):
 def add_to_schedule(summary: str, date_time: str, item_type: str, category: str, notes: str = "", duration_hours: float = 1.0):
     try:
         print(f"📝 Adding to schedule: {summary}")
-        try:
-            start_time = datetime.datetime.fromisoformat(date_time)
-        except:
-            start_time = datetime.datetime.strptime(date_time, "%Y-%m-%dT%H:%M:%S")
+        try: start_time = datetime.datetime.fromisoformat(date_time)
+        except: start_time = datetime.datetime.strptime(date_time, "%Y-%m-%dT%H:%M:%S")
 
         if start_time.tzinfo is None:
             tz = pytz.timezone(TIMEZONE)
             start_time = tz.localize(start_time)
 
         end_time = start_time + datetime.timedelta(hours=duration_hours)
-        
         event = {
             'summary': f"[{category}] {summary}",
             'description': f"Type: {item_type}\nNotes: {notes}",
@@ -178,54 +161,33 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
             'end': {'dateTime': end_time.isoformat(), 'timeZone': TIMEZONE},
         }
         calendar_service.events().insert(calendarId=CALENDAR_ID, body=event).execute()
-
         formatted_date = start_time.strftime("%m/%d/%Y %H:%M")
         values = [[formatted_date, summary, item_type, category, notes, False]]
         sheets_service.spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE, valueInputOption="USER_ENTERED", body={'values': values}
         ).execute()
-
         return f"Success: Added '{summary}' to schedule."
     except Exception as e: return f"Error adding task: {str(e)}"
 
 def remove_task(keyword: str, date_str: str = "today"):
-    """
-    Robust removal using Google's native search 'q' parameter.
-    Searches a 48-hour window to handle timezone edge cases.
-    """
     try:
-        # SEARCH 2 DAYS to be safe (Today + Tomorrow)
         start_iso, end_iso = get_date_range(date_str, days=2)
         if not start_iso: return "Error: Invalid date."
-
         print(f"🗑️ Searching for '{keyword}' starting {start_iso}...")
-
-        # Use 'q' parameter for native text search
         events_result = calendar_service.events().list(
-            calendarId=CALENDAR_ID, 
-            timeMin=start_iso, 
-            timeMax=end_iso, 
-            q=keyword, # <--- KEY FIX: Native Search
-            singleEvents=True
+            calendarId=CALENDAR_ID, timeMin=start_iso, timeMax=end_iso, q=keyword, singleEvents=True
         ).execute()
-
         events = events_result.get('items', [])
-
-        if not events:
-            return f"No events found matching '{keyword}' on or after {date_str}."
+        if not events: return f"No events found matching '{keyword}' on or after {date_str}."
 
         deleted_count = 0
         deleted_titles = []
-        
         for event in events:
             title = event.get('summary', 'No Title')
-            print(f"   found match: {title} (ID: {event['id']})")
-            
-            # Delete it
+            print(f"   Deleting: {title}")
             calendar_service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
             deleted_count += 1
             deleted_titles.append(title)
-        
         return f"Success: Deleted {deleted_count} event(s): {', '.join(deleted_titles)}"
     except Exception as e: return f"Error removing: {str(e)}"
 
@@ -242,9 +204,7 @@ def send_notification(message: str):
         return "Notification sent."
     except Exception as e: return f"Email failed: {e}"
 
-# --- REGISTER TOOLS ---
 tools = [add_to_schedule, check_schedule, list_upcoming_events, remove_task, send_notification]
-
 tool_map = {
     'add_to_schedule': add_to_schedule,
     'check_schedule': check_schedule,
@@ -253,7 +213,7 @@ tool_map = {
     'send_notification': send_notification
 }
 
-# --- AI BRAIN ---
+# --- AI BRAIN (ROBUST) ---
 def process_message(user_input, chat_history):
     max_retries = len(api_keys) + 1 
     attempts = 0
@@ -264,18 +224,21 @@ def process_message(user_input, chat_history):
             model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
             chat = model.start_chat(enable_automatic_function_calling=False)
             
-            # Inject Timezone-Aware Context
             date_context = f" [System Info: Current NY Time is {get_current_time()}]"
             augmented_input = user_input + date_context
             
             response = chat.send_message(augmented_input)
             
-            if not response.parts: return "⚠️ Error: AI returned empty response."
-                
-            part = response.candidates[0].content.parts[0]
+            # --- FIX FOR "Could not convert function_call to text" ---
+            # We must iterate through parts to find the function call.
+            function_call_part = None
+            for part in response.parts:
+                if part.function_call:
+                    function_call_part = part
+                    break
             
-            if part.function_call:
-                fc = part.function_call
+            if function_call_part:
+                fc = function_call_part.function_call
                 func_name = fc.name
                 args = dict(fc.args)
                 
@@ -294,10 +257,18 @@ def process_message(user_input, chat_history):
                         "response": {"result": result}
                     }
                 }
+                # Send the result back to Gemini to get the final spoken response
                 final_response = chat.send_message(function_response)
-                return final_response.text
+                
+                # Check if final response is safe to convert to text
+                try:
+                    return final_response.text
+                except ValueError:
+                    # Rare case: Chained tool calls
+                    return "Tool executed successfully."
 
             else:
+                # Safe to return text because we confirmed no function calls exist
                 return response.text
 
         except ResourceExhausted:
