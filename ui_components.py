@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v12.0 UI (Solid Tracer - No Fade).
+    Renders the N.A.O.M.I v13.0 UI (Infinity Loop Tracer).
     """
     
     # --- COLOR PALETTE ---
@@ -75,34 +75,49 @@ def render_jarvis_ui(state="idle"):
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- 1. THE JAGGED TRACER (SOLID - NO FADE) --- */
+        /* --- 1. THE INFINITY TRACER (SEAMLESS LOOP) --- */
         .svg-complex-tracer {{
             position: absolute;
             width: 380px; height: 380px;
             z-index: 5;
-            animation: spin-slow 45s linear infinite;
+            /* Rotate the container slowly for dynamic angle */
+            animation: spin-slow 20s linear infinite;
         }}
 
-        /* Trace 1: White Leader (Thin) */
+        /* MATH:
+           Path Length is approx 1400 units.
+           To Loop Smoothly: stroke-dasharray must be [Dash] [1400 - Dash].
+           Animation must move offset by exactly -1400.
+        */
+
+        /* Trace 1: White Leader (Thin & Fast look) */
         .trace-white {{
             fill: none;
             stroke: #ffffff;
-            stroke-width: 1.5;
+            stroke-width: 2;
             stroke-linecap: round;
-            /* Gap (2000) is larger than path (~1300) so it hides completely */
-            stroke-dasharray: 600 2000; 
-            animation: trace-jagged 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            
+            /* Dash = 300, Gap = 1100 (Total 1400) */
+            stroke-dasharray: 300 1100;
+            
+            /* Animate one full cycle */
+            animation: trace-loop 3s linear infinite;
         }}
 
-        /* Trace 2: Color Follower (Thick) */
+        /* Trace 2: Color Follower (Thick & Heavy) */
         .trace-color {{
             fill: none;
             stroke: {c};
-            stroke-width: 5;
+            stroke-width: 6;
             stroke-linecap: square;
-            filter: drop-shadow(0 0 8px {c});
-            stroke-dasharray: 300 2000;
-            animation: trace-jagged-lag 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            filter: drop-shadow(0 0 10px {c});
+            
+            /* Dash = 400, Gap = 1000 (Total 1400) */
+            stroke-dasharray: 400 1000;
+            
+            /* Same animation speed, but delayed to chase */
+            animation: trace-loop 3s linear infinite;
+            animation-delay: 0.15s; /* Visual lag */
         }}
 
         /* --- 2. RINGS & ELEMENTS --- */
@@ -169,27 +184,11 @@ def render_jarvis_ui(state="idle"):
             100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
         }}
 
-        /* --- UPDATED TRACER ANIMATIONS (NO FADE) --- */
-        
-        /* The logic: 
-           Start at positive offset (Hidden "before" the path).
-           Move to negative offset (Hidden "after" the path).
-           The gap in the dasharray (2000) ensures it's invisible at both ends.
-           No opacity changes needed.
-        */
-        
-        @keyframes trace-jagged {{
-            0% {{ stroke-dashoffset: 1300; }}
-            40% {{ stroke-dashoffset: 0; }} 
-            60% {{ stroke-dashoffset: -1300; }}
-            100% {{ stroke-dashoffset: -1300; }}
-        }}
-        
-        @keyframes trace-jagged-lag {{
-            0% {{ stroke-dashoffset: 1450; }} /* Starts further back */
-            40% {{ stroke-dashoffset: 150; }} /* Arrives at '0' later */
-            60% {{ stroke-dashoffset: -1150; }}
-            100% {{ stroke-dashoffset: -1150; }}
+        /* THE INFINITY LOOP ANIMATION */
+        /* Moves the dash offset by exactly one full path length (1400) */
+        @keyframes trace-loop {{
+            0% {{ stroke-dashoffset: 1400; }}
+            100% {{ stroke-dashoffset: 0; }}
         }}
 
         @keyframes morph-north {{
@@ -242,7 +241,9 @@ def render_jarvis_ui(state="idle"):
                      Z
                    " />
                 </defs>
+                
                 <use href="#jaggedShape" class="trace-white" />
+                
                 <use href="#jaggedShape" class="trace-color" />
             </svg>
 
