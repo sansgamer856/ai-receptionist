@@ -3,7 +3,8 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v6.0 UI (Heavy Armor Edition).
+    Renders the N.A.O.M.I v7.0 UI (The Monolith).
+    Minimalist. Industrial. Sharp radius changes.
     """
     
     # --- COLOR PALETTE ---
@@ -15,6 +16,18 @@ def render_jarvis_ui(state="idle"):
     }
     
     c = colors.get(state, colors["idle"])
+    
+    # --- SVG PATH GENERATION ---
+    # We are drawing a circle that "steps" between two radii:
+    # r1 = 180px (Inner)
+    # r2 = 230px (Outer)
+    # The path draws arcs, then cuts straight radially to the next radius.
+    
+    # This path creates a shape with 3 "Outer Tabs" and 3 "Inner Recesses"
+    # It looks like a heavy industrial lock ring.
+    svg_path = """
+    M 0 -180 
+    A 180 180 0 0 1 155.8 -90     L 199 -115                    A 230 230 0 0 1 199 115       L 155.8 90                    A 180 180 0 0 1 -155.8 90     L -199 115                    A 230 230 0 0 1 -199 -115     L -155.8 -90                  A 180 180 0 0 1 0 -180        """
     
     html_code = f"""
     <!DOCTYPE html>
@@ -29,12 +42,12 @@ def render_jarvis_ui(state="idle"):
             display: flex;
             justify-content: center;
             align-items: center;
-            height: 650px; /* Increased height for larger armor */
+            height: 600px;
             overflow: hidden;
             font-family: 'Orbitron', sans-serif;
         }}
 
-        .reactor {{
+        .container {{
             position: relative;
             width: 600px;
             height: 600px;
@@ -43,145 +56,119 @@ def render_jarvis_ui(state="idle"):
             align-items: center;
         }}
 
-        /* --- 0. CORE TEXT (PADDED & SHIMMERING) --- */
+        /* --- 1. THE TEXT (GLISTENING) --- */
         .core-text {{
             position: absolute;
             z-index: 20;
-            font-size: 32px; /* Larger */
+            font-size: 42px; /* Massive, bold */
             font-weight: 900;
-            letter-spacing: 8px;
+            letter-spacing: 10px;
+            text-transform: uppercase;
             
-            background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
+            /* The Glisten Gradient */
+            background: linear-gradient(
+                110deg, 
+                {c}40 0%, 
+                {c}40 40%, 
+                #ffffff 50%, 
+                {c}40 60%, 
+                {c}40 100%
+            );
             background-size: 200% auto;
-            color: #000;
+            
+            /* Text Masking */
+            color: transparent;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             
-            animation: text-shimmer 3s linear infinite;
+            /* Filters for "Solid" look behind the glisten */
+            filter: drop-shadow(0 0 2px {c});
+            
+            animation: text-glisten 4s linear infinite;
         }}
 
-        /* --- 1. THE CONSTANT TURBINE (THICKER & FLOATING) --- */
-        .ring-turbine {{
+        /* --- 2. THE INDUSTRIAL RING (SVG) --- */
+        .svg-ring {{
             position: absolute;
-            width: 320px; height: 320px; /* Large padding from text */
-            border-radius: 50%;
-            
-            /* THICKER LINES (1.5deg) */
-            background: repeating-conic-gradient(
-                from 0deg,
-                transparent 0deg 5deg,
-                {c} 5deg 6.5deg, 
-                transparent 6.5deg 10deg
-            );
-            
-            /* MASK: Cuts the center (padding) and outer edge (floating) */
-            -webkit-mask: radial-gradient(farthest-side, transparent 65%, black 66%, black 90%, transparent 91%);
-            mask: radial-gradient(farthest-side, transparent 65%, black 66%, black 90%, transparent 91%);
-            
-            opacity: 0.6;
-            /* CONSTANT SPEED: Does not change with state */
-            animation: spin 60s linear infinite; 
-        }}
-
-        /* --- 2. HEXAGONAL CAGE (SHARP ARMOR) --- */
-        /* This creates the sharp, non-round look */
-        .ring-hex {{
-            position: absolute;
-            width: 450px; height: 450px;
-            border: 2px solid {c};
-            opacity: 0.3;
-            
-            /* Clip path creates a Hexagon */
-            clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
-            
+            width: 600px;
+            height: 600px;
             animation: spin 30s linear infinite;
+            filter: drop-shadow(0 0 10px {c}60); /* Heavy Glow */
         }}
 
-        /* --- 3. HEAVY PLATING (THICK BLOCKS) --- */
-        .ring-plate {{
-            position: absolute;
-            width: 480px; height: 480px;
-            border-radius: 50%;
+        path {{
+            fill: none;
+            stroke: {c};
+            stroke-width: 15; /* THICK solid line */
+            stroke-linecap: square; /* Sharp ends if we had them */
+            stroke-linejoin: miter; /* Sharp corners on the cuts */
             
-            /* Hard stops create "Blocky" look */
-            border: 20px solid transparent; 
-            border-top: 20px solid {c};
-            border-bottom: 20px solid {c};
-            
-            filter: drop-shadow(0 0 10px {c});
-            opacity: 0.8;
-            
-            animation: spin 15s cubic-bezier(0.68, -0.55, 0.27, 1.55) infinite;
-        }}
-
-        /* --- 4. OUTER RETICLE (THIN & SHARP) --- */
-        .ring-reticle {{
-            position: absolute;
-            width: 540px; height: 540px;
-            border-radius: 50%;
-            border: 1px solid {c}50;
-            
-            /* Corner cuts */
-            border-left: 50px solid transparent;
-            border-right: 50px solid transparent;
-            
-            animation: spin-reverse 40s linear infinite;
-        }}
-
-        /* --- 5. INNER JUMP RING (SMALL & FAST) --- */
-        .ring-inner {{
-            position: absolute;
-            width: 220px; height: 220px;
-            border-radius: 50%;
-            border-top: 2px solid {c};
-            border-bottom: 2px solid {c};
-            opacity: 0.5;
-            animation: spin-jump 3s ease-in-out infinite;
+            transition: stroke 0.5s ease, filter 0.5s ease;
         }}
 
         /* --- ANIMATIONS --- */
-        @keyframes text-shimmer {{ 0% {{ background-position: 200% center; }} 100% {{ background-position: -200% center; }} }}
-        @keyframes spin {{ 100% {{ transform: rotate(360deg); }} }}
-        @keyframes spin-reverse {{ 100% {{ transform: rotate(-360deg); }} }}
-        
-        @keyframes spin-jump {{
-            0% {{ transform: rotate(0deg) scale(1); }}
-            50% {{ transform: rotate(180deg) scale(1.1); }}
-            100% {{ transform: rotate(360deg) scale(1); }}
+        @keyframes text-glisten {{
+            0% {{ background-position: 200% center; }}
+            100% {{ background-position: -200% center; }}
         }}
-        
-        @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
+
+        @keyframes spin {{
+            100% {{ transform: rotate(360deg); }}
+        }}
+
+        @keyframes bounce {{ 
+            0% {{ transform: scale(1); }} 
+            100% {{ transform: scale(1.02); }} 
+        }}
 
         /* --- STATE LOGIC --- */
         
-        /* Thinking: Armor spins fast, Hexagon pulses, Turbine stays CONSTANT */
-        .thinking .ring-plate {{ animation: spin 2s linear infinite; border-width: 10px; }}
-        .thinking .ring-hex {{ border-width: 5px; opacity: 0.8; animation-duration: 5s; }}
-        
-        /* Speaking: Bounce effect */
-        .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
-        
-        /* Listening: Hexagon expands */
-        .listening .ring-hex {{ transform: scale(1.1); transition: transform 0.5s; }}
+        /* Thinking: Spin Fast, Brighten Ring */
+        .thinking .svg-ring {{ animation-duration: 2s; }}
+        .thinking path {{ stroke: #ffaa00; stroke-width: 18; filter: drop-shadow(0 0 20px #ffaa00); }}
+
+        /* Listening: Slow spin, Pulse Text */
+        .listening .svg-ring {{ animation-duration: 60s; }}
+        .listening .core-text {{ filter: drop-shadow(0 0 15px {c}); letter-spacing: 12px; transition: letter-spacing 0.5s; }}
+
+        /* Speaking: Audio Bounce */
+        .speaking .container {{ animation: bounce 0.15s infinite alternate; }}
+        .speaking path {{ stroke: #ffffff; filter: drop-shadow(0 0 15px #00f3ff); }}
+        .speaking .core-text {{ background-image: linear-gradient(110deg, #fff 0%, #00f3ff 50%, #fff 100%); }}
 
     </style>
     </head>
     <body>
-        <div class="reactor {state}">
-            <div class="ring-reticle"></div>
-
-            <div class="ring-plate"></div>
-
-            <div class="ring-hex"></div>
-
-            <div class="ring-turbine"></div>
-
-            <div class="ring-inner"></div>
+        <div class="container {state}">
+            
+            <svg class="svg-ring" viewBox="-250 -250 500 500">
+                <path d="
+                    M 0 -180 
+                    A 180 180 0 0 1 127 -127
+                    L 162 -162               
+                    A 230 230 0 0 1 230 0    
+                    L 180 0                  
+                    A 180 180 0 0 1 127 127  
+                    L 162 162                
+                    A 230 230 0 0 1 0 230    
+                    L 0 180                  
+                    A 180 180 0 0 1 -127 127 
+                    L -162 162               
+                    A 230 230 0 0 1 -230 0   
+                    L -180 0                 
+                    A 180 180 0 0 1 -127 -127
+                    L -162 -162              
+                    A 230 230 0 0 1 0 -230   
+                    L 0 -180                 
+                    Z
+                " />
+            </svg>
 
             <div class="core-text">N.A.O.M.I.</div>
+            
         </div>
     </body>
     </html>
     """
     
-    components.html(html_code, height=650)
+    components.html(html_code, height=600)
