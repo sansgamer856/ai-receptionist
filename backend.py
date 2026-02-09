@@ -5,6 +5,7 @@ import smtplib
 import time
 import json
 import pytz 
+import re
 from email.mime.text import MIMEText
 
 import google.generativeai as genai
@@ -124,6 +125,41 @@ def format_event_time(iso_str):
     except:
         return iso_str 
 
+def parse_smart_time(time_input, original_date_obj=None):
+    """
+    Parses fuzzy time strings (e.g. "15:00", "3pm", "3:00 PM")
+    and combines them with the original event date.
+    """
+    tz = pytz.timezone(TIMEZONE)
+    
+    # Clean input
+    time_input = time_input.strip().upper()
+
+    # 1. Try Full ISO format first (in case Gemini gets it right)
+    try:
+        dt = datetime.datetime.fromisoformat(time_input)
+        if dt.tzinfo is None: dt = tz.localize(dt)
+        return dt
+    except: pass
+
+    # If we don't have an original date, we can't do relative time
+    if not original_date_obj:
+        return None
+
+    target_date = original_date_obj.date()
+
+    # 2. Try simple formats
+    formats = ["%H:%M", "%I:%M %p", "%I %p", "%I%p"] # 15:00, 3:00 PM, 3 PM, 3PM
+    
+    for fmt in formats:
+        try:
+            t = datetime.datetime.strptime(time_input, fmt).time()
+            dt = datetime.datetime.combine(target_date, t)
+            return tz.localize(dt)
+        except: continue
+        
+    return None
+
 # --- TOOLS ---
 def list_upcoming_events(max_results: float = 50):
     try:
@@ -196,66 +232,60 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
 
 def update_event(keyword: str, date_str: str = "today", new_start_time: str = None, new_title: str = None):
     """
-    Updates an event matching the keyword and date.
-    new_start_time: ISO format string for the new time.
-    new_title: String for the new title.
+    Updates an event. 
+    keyword: Word to search for (e.g., "Rocket").
+    new_start_time: Can be ISO "2024-02-09T15:00:00" OR simple time "15:00" / "3:00 PM".
     """
     try:
-        # 1. Find the event first
-        start_iso, end_iso = get_date_range(date_str, days=2) # Search 48h window to be safe
+        # 1. Search for the event (Wide window to be safe)
+        start_iso, end_iso = get_date_range(date_str, days=2)
         if not start_iso: return "Error: Invalid date."
 
-        print(f"🔄 Updating '{keyword}' around {date_str}...")
-
+        print(f"🔄 Searching to update '{keyword}' around {date_str}...")
         events_result = calendar_service.events().list(
-            calendarId=CALENDAR_ID, 
-            timeMin=start_iso, 
-            timeMax=end_iso, 
-            q=keyword, # Search by text
-            singleEvents=True
+            calendarId=CALENDAR_ID, timeMin=start_iso, timeMax=end_iso, q=keyword, singleEvents=True
         ).execute()
 
         events = events_result.get('items', [])
-        if not events: return f"Could not find any event matching '{keyword}' on {date_str} to update."
+        if not events: return f"Could not find any event matching '{keyword}' on {date_str}."
 
-        # Pick the first match
         target_event = events[0]
         event_id = target_event['id']
         current_summary = target_event.get('summary', 'No Title')
         
-        # 2. Prepare Updates
+        # Get current start time object (for relative time calculation)
+        current_start_raw = target_event['start'].get('dateTime', target_event['start'].get('date'))
+        current_start_dt = None
+        if 'T' in current_start_raw:
+            current_start_dt = datetime.datetime.fromisoformat(current_start_raw)
+        
         changes = {}
-        updated_fields = []
+        updated_log = []
 
+        # 2. Handle Title Change
         if new_title:
             changes['summary'] = new_title
-            updated_fields.append(f"Title -> {new_title}")
+            updated_log.append(f"Title -> {new_title}")
 
-        if new_start_time:
-            # Parse new time
-            try: start_dt = datetime.datetime.fromisoformat(new_start_time)
-            except: start_dt = datetime.datetime.strptime(new_start_time, "%Y-%m-%dT%H:%M:%S")
+        # 3. Handle Time Change (The Tricky Part)
+        if new_start_time and current_start_dt:
+            # Use our smart parser
+            new_dt = parse_smart_time(new_start_time, current_start_dt)
             
-            if start_dt.tzinfo is None:
-                tz = pytz.timezone(TIMEZONE)
-                start_dt = tz.localize(start_dt)
-            
-            # Assume 1 hour duration if not specified, or keep existing duration if possible
-            # For simplicity, we default to +1h or keep it if we read the old one (complex).
-            # Let's just set +1h for V1 reliability.
-            end_dt = start_dt + datetime.timedelta(hours=1)
-            
-            changes['start'] = {'dateTime': start_dt.isoformat(), 'timeZone': TIMEZONE}
-            changes['end'] = {'dateTime': end_dt.isoformat(), 'timeZone': TIMEZONE}
-            updated_fields.append(f"Time -> {format_event_time(start_dt.isoformat())}")
+            if new_dt:
+                # Default duration is 1 hour unless we calculate the old duration (skipped for simplicity)
+                end_dt = new_dt + datetime.timedelta(hours=1)
+                
+                changes['start'] = {'dateTime': new_dt.isoformat(), 'timeZone': TIMEZONE}
+                changes['end'] = {'dateTime': end_dt.isoformat(), 'timeZone': TIMEZONE}
+                updated_log.append(f"Time -> {format_event_time(new_dt.isoformat())}")
+            else:
+                return f"Error: Could not understand the time format '{new_start_time}'. Try '15:00' or '3:00 PM'."
 
-        if not changes:
-            return "Found the event, but no changes (time or title) were requested."
+        if not changes: return "Found event, but no changes were understood."
 
-        # 3. Execute Patch
         calendar_service.events().patch(calendarId=CALENDAR_ID, eventId=event_id, body=changes).execute()
-
-        return f"Success: Updated '{current_summary}'. Changes: {', '.join(updated_fields)}"
+        return f"Success: Updated '{current_summary}'. ({', '.join(updated_log)})"
 
     except Exception as e: return f"Error updating event: {str(e)}"
 
@@ -273,7 +303,6 @@ def delete_events(date_str: str = "today", keyword: str = ""):
 
         deleted_count = 0
         deleted_titles = []
-        
         for event in events:
             title = event.get('summary', 'No Title')
             should_delete = False
@@ -281,12 +310,11 @@ def delete_events(date_str: str = "today", keyword: str = ""):
             elif keyword.lower() in title.lower(): should_delete = True
             
             if should_delete:
-                print(f"   ❌ Deleting: {title}")
                 calendar_service.events().delete(calendarId=CALENDAR_ID, eventId=event['id']).execute()
                 deleted_count += 1
                 deleted_titles.append(title)
         
-        if deleted_count == 0: return f"Found {len(events)} events, but none matched '{keyword}'."
+        if deleted_count == 0: return f"Found events, but none matched '{keyword}'."
         return f"Success: Deleted {deleted_count} event(s): {', '.join(deleted_titles)}"
     except Exception as e: return f"Error removing: {str(e)}"
 
@@ -303,29 +331,30 @@ def send_notification(message: str):
         return "Notification sent."
     except Exception as e: return f"Email failed: {e}"
 
-# --- REGISTER TOOLS ---
 tools = [add_to_schedule, check_schedule, list_upcoming_events, update_event, delete_events, send_notification]
 tool_map = {
     'add_to_schedule': add_to_schedule,
     'check_schedule': check_schedule,
     'list_upcoming_events': list_upcoming_events, 
-    'update_event': update_event, # NEW TOOL
+    'update_event': update_event,
     'delete_events': delete_events,
     'send_notification': send_notification
 }
 
 # --- AI BRAIN ---
 def process_message(user_input, chat_history):
+    if user_input.upper().strip() in ["STOP", "CANCEL", "RESET", "END"]:
+        return "🛑 Process Stopped."
+
     max_retries = len(api_keys) + 1 
     attempts = 0
 
     system_instruction = f"""
     You are a smart receptionist.
-    1. When adding tasks, classify using:
-       - Types: {', '.join(VALID_TYPES)}
-       - Categories: {', '.join(VALID_CATEGORIES)}
-    2. To UPDATE or EDIT an event, use the 'update_event' tool.
-    3. You can process multiple requests at once.
+    1. Manage tasks using: {', '.join(VALID_TYPES)} and {', '.join(VALID_CATEGORIES)}.
+    2. To UPDATE an event, use 'update_event'. 
+       - You can send simple times like "3:00 PM" or "15:00" for the new_start_time.
+    3. If a tool fails, report the error. DO NOT retry endlessly.
     """
 
     while attempts < max_retries:
@@ -340,7 +369,7 @@ def process_message(user_input, chat_history):
             
             # Extract Function Calls
             function_calls_found = []
-            seen_calls = set() 
+            seen_calls = set()
 
             for part in response.parts:
                 if part.function_call:
@@ -360,7 +389,10 @@ def process_message(user_input, chat_history):
                     print(f"🤖 Gemini Request: {func_name} | Args: {args}")
                     
                     if func_name in tool_map:
-                        result = tool_map[func_name](**args)
+                        try:
+                            result = tool_map[func_name](**args)
+                        except Exception as tool_e:
+                            result = f"Error executing {func_name}: {str(tool_e)}"
                     else:
                         result = f"Error: Function {func_name} not found."
                     
@@ -380,8 +412,8 @@ def process_message(user_input, chat_history):
                     if not text or len(text.strip()) < 2:
                         return f"✅ Actions completed:\n" + "\n".join(all_results_text)
                     return text
-                except Exception as inner_e:
-                    return f"✅ Actions completed successfully:\n" + "\n".join(all_results_text)
+                except Exception:
+                    return f"✅ Actions completed (Summary Unavailable):\n" + "\n".join(all_results_text)
 
             else:
                 return response.text
@@ -397,7 +429,6 @@ def process_message(user_input, chat_history):
         
         except Exception as e:
             traceback.print_exc()
-            attempts += 1
-            time.sleep(1)
+            return f"⚠️ System Error: {str(e)}"
     
     return "⚠️ Error: Request failed."
