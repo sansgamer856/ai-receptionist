@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v10.0 UI (Shuriken & Lag Trace).
+    Renders the N.A.O.M.I v10.0 UI (Shuriken & Dual Tracer).
     """
     
     # --- COLOR PALETTE ---
@@ -43,11 +43,11 @@ def render_jarvis_ui(state="idle"):
             align-items: center;
         }}
 
-        /* --- TITLE (Larger: 26px) --- */
+        /* --- TITLE (SLIGHTLY LARGER) --- */
         .core-text {{
             position: absolute;
             z-index: 20;
-            font-size: 26px; /* BUMPED UP */
+            font-size: 26px; /* Increased from 20px */
             font-weight: 900;
             letter-spacing: 6px;
             background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
@@ -58,51 +58,61 @@ def render_jarvis_ui(state="idle"):
             animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 0. BACKGROUND TRACER (Simple Circle) --- */
-        .svg-tracer {{
+        /* --- 0. BACKGROUND TRACER (SIMPLE CIRCLE) --- */
+        .svg-bg-tracer {{
             position: absolute;
             width: 480px; height: 480px;
             z-index: 0;
             animation: spin-slow 30s linear infinite;
         }}
-        .tracer-path {{
-            fill: none; stroke: {c}; stroke-width: 2;
-            stroke-dasharray: 1445; stroke-dashoffset: 1445;
+        .tracer-path-bg {{
+            fill: none;
+            stroke: {c};
+            stroke-width: 1;
+            stroke-dasharray: 1445; 
+            stroke-dashoffset: 1445;
             opacity: 0.3;
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- NEW: DOUBLE LAG TRACER (Complex Hex Shape) --- */
-        .svg-lag {{
+        /* --- NEW: THE COMPLEX DOUBLE TRACER (BETWEEN RINGS) --- */
+        .svg-complex-tracer {{
             position: absolute;
-            width: 560px; height: 560px; /* Large outer layer */
-            z-index: 1;
+            width: 380px; height: 380px; /* Sits between Scale and Outer */
+            z-index: 5;
+            /* No rotation on the container, the paths draw the shape */
         }}
+
+        /* The Geometry: A Tech Octagon */
+        /* d="M 190,40 L 240,40 L 260,90 L 320,90 L 340,140 ... " (Simplified below) */
         
-        /* The path definition is shared, but properties differ */
-        .lag-path-white {{
+        /* Trace 1: Thin White Leader */
+        .trace-white {{
             fill: none;
             stroke: #ffffff;
             stroke-width: 1;
-            opacity: 0.6;
             stroke-linecap: round;
-            stroke-dasharray: 200 1000; /* Short dash, long gap */
-            animation: spin-lag 8s linear infinite;
-        }}
-        
-        .lag-path-color {{
-            fill: none;
-            stroke: {c};
-            stroke-width: 5; /* Thicker */
-            opacity: 1;
-            stroke-linecap: square;
-            stroke-dasharray: 100 1100; /* Shorter dash */
-            /* Animation is slightly delayed/offset to create "Lag" */
-            animation: spin-lag 8s linear infinite; 
-            animation-delay: 0.15s; /* The Lag Factor */
+            stroke-dasharray: 1200; /* Approx length of shape */
+            stroke-dashoffset: 1200;
+            animation: draw-complex 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }}
 
-        /* --- 1. SPLIT-ARC RING --- */
+        /* Trace 2: Thick Color Laggard */
+        .trace-color {{
+            fill: none;
+            stroke: {c};
+            stroke-width: 4; /* Thicker */
+            stroke-linecap: square;
+            /* Short segment (Comet) */
+            stroke-dasharray: 200 1200; 
+            stroke-dashoffset: 1200;
+            filter: drop-shadow(0 0 5px {c});
+            /* Same animation, but slight delay/offset visually handled by dasharray */
+            animation: draw-complex 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            animation-delay: 0.1s; /* Slight lag */
+        }}
+
+        /* --- 1. THE SPLIT-ARC RING --- */
         .ring-arc {{
             position: absolute;
             width: 240px; height: 240px;
@@ -114,7 +124,7 @@ def render_jarvis_ui(state="idle"):
             animation: spin-smooth 20s linear infinite;
         }}
 
-        /* --- 2. RULER SCALE --- */
+        /* --- 2. THE RULER SCALE --- */
         .ring-scale {{
             position: absolute;
             width: 320px; height: 320px;
@@ -126,7 +136,7 @@ def render_jarvis_ui(state="idle"):
             animation: spin-reverse 40s linear infinite;
         }}
 
-        /* --- 3. MORPHING SHURIKENS (8-Point Polygon Logic) --- */
+        /* --- 3. MORPHING SHURIKENS (Updated Shape) --- */
         .ring-cardinal {{
             position: absolute;
             width: 100%; height: 100%;
@@ -136,18 +146,19 @@ def render_jarvis_ui(state="idle"):
         .cardinal-point {{
             position: absolute;
             left: 50%; top: 50%;
-            width: 50px; height: 50px;
+            width: 40px; height: 40px;
             background: {c};
+            
+            /* Start: Standard Triangle */
+            clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%);
             transform-origin: center center;
-            box-shadow: 0 0 10px {c};
-            /* Start: Triangle (Mapped to 8 points) */
-            clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%);
+            box-shadow: 0 0 15px {c};
         }}
 
-        .north {{ animation: morph-north 6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }}
-        .south {{ animation: morph-south 6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }}
-        .east  {{ animation: morph-east  6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }}
-        .west  {{ animation: morph-west  6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }}
+        .north {{ animation: morph-north 6s ease-in-out infinite; }}
+        .south {{ animation: morph-south 6s ease-in-out infinite; }}
+        .east  {{ animation: morph-east  6s ease-in-out infinite; }}
+        .west  {{ animation: morph-west  6s ease-in-out infinite; }}
 
         /* --- 4. OUTER DASHED --- */
         .ring-dashed {{
@@ -165,49 +176,44 @@ def render_jarvis_ui(state="idle"):
         @keyframes spin-reverse {{ 100% {{ transform: rotate(-360deg); }} }}
         @keyframes text-shimmer {{ 0% {{ background-position: 200% center; }} 100% {{ background-position: -200% center; }} }}
 
-        /* TRACER LOGIC */
+        /* Simple Circle Trace */
         @keyframes trace-circle {{
             0% {{ stroke-dasharray: 0 1445; stroke-dashoffset: 0; }}
             50% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: 0; }}
             100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
         }}
-        
-        /* THE LAG CHASE ANIMATION */
-        @keyframes spin-lag {{
-            0% {{ stroke-dashoffset: 1200; transform: rotate(0deg); }}
-            100% {{ stroke-dashoffset: 0; transform: rotate(360deg); }}
+
+        /* Complex Shape Trace (Draws and then fades/moves) */
+        @keyframes draw-complex {{
+            0% {{ stroke-dashoffset: 1200; }} /* Hidden */
+            40% {{ stroke-dashoffset: 0; }}    /* Fully Drawn */
+            60% {{ stroke-dashoffset: 0; opacity: 1; }} /* Pause */
+            100% {{ stroke-dashoffset: -1200; opacity: 0; }} /* Disappear/Travel off */
         }}
 
-        /* MORPH LOGIC (Triangle -> Shuriken)
-           Triangle: 50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%
-           Shuriken: 50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%
+        /* MORPH LOGIC: SHARPER SHURIKEN */
+        /* Triangle: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%)
+           Shuriken (3-Point Spike): polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%)
+           This creates a "Star Trek Badge" / Stealth Fighter shape.
         */
 
         @keyframes morph-north {{
-            0%, 100% {{ 
-                transform: translate(-50%, -190px) rotate(0deg); 
-                clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%); 
-            }}
-            50% {{ 
-                transform: translate(-50%, -260px) rotate(0deg) scale(1.2); 
-                clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%); /* Shuriken */
-            }}
+            0%, 100% {{ transform: translate(-50%, -200px); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
+            50% {{ transform: translate(-50%, -260px); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
         }}
         @keyframes morph-south {{
-            0%, 100% {{ transform: translate(-50%, 150px) rotate(180deg); clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%); }}
-            50% {{ transform: translate(-50%, 220px) rotate(180deg) scale(1.2); clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%); }}
+            0%, 100% {{ transform: translate(-50%, 160px) rotate(180deg); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
+            50% {{ transform: translate(-50%, 220px) rotate(180deg); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
         }}
         @keyframes morph-east {{
-            0%, 100% {{ transform: translate(150px, -50%) rotate(90deg); clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%); }}
-            50% {{ transform: translate(220px, -50%) rotate(90deg) scale(1.2); clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%); }}
+            0%, 100% {{ transform: translate(160px, -50%) rotate(90deg); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
+            50% {{ transform: translate(220px, -50%) rotate(90deg); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
         }}
         @keyframes morph-west {{
-            0%, 100% {{ transform: translate(-190px, -50%) rotate(-90deg); clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%); }}
-            50% {{ transform: translate(-260px, -50%) rotate(-90deg) scale(1.2); clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%); }}
+            0%, 100% {{ transform: translate(-200px, -50%) rotate(-90deg); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
+            50% {{ transform: translate(-260px, -50%) rotate(-90deg); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
         }}
 
-        /* --- STATE LOGIC --- */
-        .thinking .ring-arc {{ border-color: {c}; animation-duration: 2s; }}
         .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
         @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
 
@@ -216,13 +222,16 @@ def render_jarvis_ui(state="idle"):
     <body>
         <div class="reactor {state}">
             
-            <svg class="svg-lag" viewBox="0 0 600 600">
-                 <path class="lag-path-white" d="M300,50 L516.5,175 L516.5,425 L300,550 L83.5,425 L83.5,175 Z" />
-                 <path class="lag-path-color" d="M300,50 L516.5,175 L516.5,425 L300,550 L83.5,425 L83.5,175 Z" />
+            <svg class="svg-bg-tracer" viewBox="0 0 500 500">
+                <circle class="tracer-path-bg" cx="250" cy="250" r="230" />
             </svg>
 
-            <svg class="svg-tracer" viewBox="0 0 500 500">
-                <circle class="tracer-path" cx="250" cy="250" r="230" />
+            <svg class="svg-complex-tracer" viewBox="0 0 400 400">
+                <defs>
+                    <path id="complexShape" d="M 200,10 L 330,60 L 390,190 L 330,320 L 200,390 L 70,320 L 10,190 L 70,60 Z" />
+                </defs>
+                <use href="#complexShape" class="trace-white" />
+                <use href="#complexShape" class="trace-color" />
             </svg>
 
             <div class="ring-dashed"></div>
