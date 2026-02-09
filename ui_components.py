@@ -3,15 +3,16 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v3.0 UI (Triangular Core Edition).
+    Renders the N.A.O.M.I v3.1 UI (Fixed Core & Positioning).
     """
     
     # --- COLOR PALETTE ---
+    # We define the main color, but 'speaking' will get special CSS overrides for the mix.
     colors = {
-        "idle": "#00f3ff",     # Cyan
+        "idle": "#00f3ff",      # Cyan
         "listening": "#d600ff", # Neon Purple
         "thinking": "#ffaa00",  # Amber/Gold
-        "speaking": "#ffffff"   # White
+        "speaking": "#ffffff"   # White (Base) -> Blue added via CSS
     }
     
     main_color = colors.get(state, colors["idle"])
@@ -43,133 +44,132 @@ def render_jarvis_ui(state="idle"):
             display: flex;
             justify-content: center;
             align-items: center;
+            /* Push up slightly to make room for text */
+            transform: translateY(-20px); 
         }}
 
-        /* --- SHARED RING STYLES --- */
+        /* --- RINGS --- */
         .ring {{
             position: absolute;
             border-radius: 50%;
-            box-shadow: 0 0 10px {main_color}40; /* Low opacity glow */
+            box-shadow: 0 0 10px {main_color}40;
             transition: all 0.5s ease;
+            z-index: 1;
         }}
 
-        /* --- LAYER 1: OUTER STATIC HUD --- */
-        .ring-1 {{
+        .ring-1 {{ /* Outer Static */
             width: 380px; height: 380px;
-            border: 1px solid {main_color}20; /* Very faint */
+            border: 1px solid {main_color}30;
             box-shadow: none;
         }}
 
-        /* --- LAYER 2: ROTATING TICKS --- */
-        .ring-2 {{
+        .ring-2 {{ /* Ticks */
             width: 340px; height: 340px;
-            border-left: 2px solid {main_color};
-            border-right: 2px solid {main_color};
+            border-left: 4px solid {main_color};
+            border-right: 4px solid {main_color};
             border-top: 2px solid transparent;
             border-bottom: 2px solid transparent;
-            animation: spin 15s linear infinite;
+            animation: spin 20s linear infinite;
         }}
 
-        /* --- LAYER 3: THIN GYRO --- */
-        .ring-3 {{
+        .ring-3 {{ /* Thin Gyro */
             width: 280px; height: 280px;
-            border: 1px dashed {main_color}80;
-            animation: spin-reverse 20s linear infinite;
+            border: 1px dashed {main_color}90;
+            animation: spin-reverse 25s linear infinite;
         }}
 
-        /* --- LAYER 4: TECH ARCS (The thick parts) --- */
-        .ring-4 {{
+        .ring-4 {{ /* Thick Tech Arcs */
             width: 220px; height: 220px;
             border: 4px solid transparent;
-            border-top: 4px solid {main_color};
-            border-bottom: 4px solid {main_color};
-            filter: drop-shadow(0 0 5px {main_color});
-            animation: spin 4s linear infinite;
+            border-top: 6px solid {main_color};
+            border-bottom: 6px solid {main_color};
+            filter: drop-shadow(0 0 8px {main_color});
+            animation: spin 6s linear infinite;
         }}
 
-        /* --- LAYER 5: INNER DATA RING --- */
-        .ring-5 {{
+        .ring-5 {{ /* Inner Data */
             width: 160px; height: 160px;
-            border-radius: 50%;
             border: 2px dotted {main_color};
-            animation: spin-reverse 8s linear infinite;
+            animation: spin-reverse 10s linear infinite;
         }}
 
-        /* --- THE CORE: TRIANGLE DESIGN --- */
+        /* --- THE DELTA CORE (Fixed Visibility) --- */
         .triangle-wrapper {{
             position: absolute;
-            width: 0; 
-            height: 0; 
+            z-index: 10; /* Ensure it's on top */
             display: flex;
             justify-content: center;
             align-items: center;
-            animation: pulse-core 2s ease-in-out infinite;
+            animation: pulse-core 3s ease-in-out infinite;
         }}
 
+        /* The Main Solid Triangle */
         .triangle {{
             width: 80px;
             height: 70px;
-            background-color: {main_color}10; /* Transparent fill */
-            border-bottom: 2px solid {main_color};
-            position: relative;
+            background: {main_color}20; /* 20% opacity fill */
+            border: 2px solid {main_color};
+            /* Modern clip-path for perfect triangle shape */
             clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-            box-shadow: 0 0 20px {main_color};
+            box-shadow: 0 0 30px {main_color};
         }}
-        
-        /* Inner glowing triangle */
+
+        /* The Inner Glowing Triangle */
         .triangle::after {{
             content: '';
             position: absolute;
-            top: 10px; left: 20px;
-            width: 40px; height: 35px;
+            top: 20%; left: 25%;
+            width: 50%; height: 50%;
             background: {main_color};
             clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-            box-shadow: 0 0 20px {main_color};
+            box-shadow: 0 0 15px {main_color};
         }}
-        
-        /* Inverted Triangle for "Star" effect */
+
+        /* The Outer Spinning "Star" Triangle */
         .triangle-inverted {{
             position: absolute;
-            width: 80px; height: 70px;
-            border-top: 2px solid {main_color};
-            background-color: transparent;
-            clip-path: polygon(0% 0%, 100% 0%, 50% 100%);
-            opacity: 0.5;
-            animation: spin 10s linear infinite; /* Spin the outer triangle */
+            width: 100px; height: 90px;
+            background: transparent;
+            border: 1px solid {main_color};
+            clip-path: polygon(50% 100%, 0% 0%, 100% 0%); /* Inverted */
+            opacity: 0.6;
+            animation: spin 12s linear infinite;
         }}
 
-        /* --- TEXT LABEL --- */
+        /* --- TEXT LABEL (Lowered) --- */
         .label {{
             position: absolute;
-            bottom: 20px;
+            bottom: -60px; /* Moved way down */
             color: {main_color};
-            letter-spacing: 4px;
-            font-size: 14px;
+            letter-spacing: 6px;
+            font-size: 16px;
+            font-weight: bold;
             text-shadow: 0 0 10px {main_color};
-            opacity: 0.8;
+            opacity: 0.9;
         }}
 
-        /* --- STATE ANIMATIONS --- */
+        /* --- SPECIAL SPEAKING STATE (White + Blue Mix) --- */
+        /* Overrides the default white to add blue glow */
+        .speaking .ring {{ border-color: #ffffff; box-shadow: 0 0 10px #00f3ff; }}
+        .speaking .ring-4 {{ border-top-color: #ffffff; border-bottom-color: #ffffff; filter: drop-shadow(0 0 10px #00f3ff); }}
+        .speaking .triangle {{ border-color: #ffffff; background: rgba(0, 243, 255, 0.3); box-shadow: 0 0 40px #00f3ff; }}
+        .speaking .triangle::after {{ background: #ffffff; box-shadow: 0 0 20px #00f3ff; }}
+        .speaking .label {{ color: #ffffff; text-shadow: 0 0 10px #00f3ff; }}
         
-        /* LISTENING: Slow, deep breathing */
-        .listening .ring-4 {{ animation-duration: 10s; box-shadow: 0 0 15px {main_color}; }}
-        .listening .triangle-wrapper {{ animation: breathe 3s infinite ease-in-out; }}
-
-        /* THINKING: Fast, chaotic spin */
-        .thinking .ring-2 {{ animation: spin 1s linear infinite; border-width: 4px; }}
-        .thinking .ring-4 {{ animation: spin-reverse 1.5s linear infinite; }}
-        .thinking .ring-5 {{ border-style: solid; border-width: 2px; }}
-        
-        /* SPEAKING: Reaction to sound */
+        /* Speaking Animation: Bounce */
         .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
-        .speaking .triangle {{ background: {main_color}; }} /* Solid core when speaking */
 
-        /* --- KEYFRAMES --- */
+        /* --- OTHER ANIMATIONS --- */
+        .listening .triangle-wrapper {{ animation: breathe 2s infinite ease-in-out; }}
+        .thinking .ring-2 {{ animation: spin 0.8s linear infinite; border-width: 4px; border-color: #ffaa00; }}
+        .thinking .triangle {{ animation: spin-core 1s linear infinite; }}
+
         @keyframes spin {{ 100% {{ transform: rotate(360deg); }} }}
         @keyframes spin-reverse {{ 100% {{ transform: rotate(-360deg); }} }}
-        @keyframes pulse-core {{ 0% {{ opacity: 0.7; transform: scale(0.95); }} 50% {{ opacity: 1; transform: scale(1.05); }} 100% {{ opacity: 0.7; transform: scale(0.95); }} }}
-        @keyframes breathe {{ 0% {{ transform: scale(0.9); }} 50% {{ transform: scale(1.1); }} 100% {{ transform: scale(0.9); }} }}
-        @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
+        @keyframes spin-core {{ 100% {{ transform: rotateY(360deg); }} }}
+        @keyframes pulse-core {{ 0% {{ transform: scale(0.9); opacity: 0.8; }} 50% {{ transform: scale(1.05); opacity: 1; }} 100% {{ transform: scale(0.9); opacity: 0.8; }} }}
+        @keyframes breathe {{ 0% {{ transform: scale(0.95); }} 50% {{ transform: scale(1.1); }} 100% {{ transform: scale(0.95); }} }}
+        @keyframes bounce {{ 0% {{ transform: translateY(-20px) scale(1); }} 100% {{ transform: translateY(-20px) scale(1.02); }} }}
 
     </style>
     </head>
