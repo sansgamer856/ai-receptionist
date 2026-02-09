@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v13.0 UI (Infinity Loop Tracer).
+    Renders the N.A.O.M.I v14.0 UI (The Perfect Chase).
     """
     
     # --- COLOR PALETTE ---
@@ -75,7 +75,7 @@ def render_jarvis_ui(state="idle"):
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- 1. THE INFINITY TRACER (SEAMLESS LOOP) --- */
+        /* --- 1. THE INFINITY TRACER (SEAMLESS CHASE) --- */
         .svg-complex-tracer {{
             position: absolute;
             width: 380px; height: 380px;
@@ -84,13 +84,14 @@ def render_jarvis_ui(state="idle"):
             animation: spin-slow 20s linear infinite;
         }}
 
-        /* MATH:
-           Path Length is approx 1400 units.
-           To Loop Smoothly: stroke-dasharray must be [Dash] [1400 - Dash].
-           Animation must move offset by exactly -1400.
+        /* THE CHASE LOGIC:
+           Path Length ~1400.
+           Both animate from 1400 to 0 (one full loop).
+           White starts at -0.25s (Ahead).
+           Color starts at 0s (Behind).
         */
 
-        /* Trace 1: White Leader (Thin & Fast look) */
+        /* Trace 1: White Leader (Thin) */
         .trace-white {{
             fill: none;
             stroke: #ffffff;
@@ -100,11 +101,12 @@ def render_jarvis_ui(state="idle"):
             /* Dash = 300, Gap = 1100 (Total 1400) */
             stroke-dasharray: 300 1100;
             
-            /* Animate one full cycle */
+            /* Speed: 3s per loop. Delay: -0.25s (Starts ahead) */
             animation: trace-loop 3s linear infinite;
+            animation-delay: -0.25s; 
         }}
 
-        /* Trace 2: Color Follower (Thick & Heavy) */
+        /* Trace 2: Color Follower (Thick) */
         .trace-color {{
             fill: none;
             stroke: {c};
@@ -115,9 +117,9 @@ def render_jarvis_ui(state="idle"):
             /* Dash = 400, Gap = 1000 (Total 1400) */
             stroke-dasharray: 400 1000;
             
-            /* Same animation speed, but delayed to chase */
+            /* Speed: 3s per loop. Delay: 0s (Starts normal) */
             animation: trace-loop 3s linear infinite;
-            animation-delay: 0.15s; /* Visual lag */
+            animation-delay: 0s;
         }}
 
         /* --- 2. RINGS & ELEMENTS --- */
