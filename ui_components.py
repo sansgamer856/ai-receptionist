@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v12.0 UI (Infinite Pursuit).
+    Renders the N.A.O.M.I v12.0 UI (Solid Tracer - No Fade).
     """
     
     # --- COLOR PALETTE ---
@@ -58,7 +58,7 @@ def render_jarvis_ui(state="idle"):
             animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 0. BACKGROUND TRACER (SIMPLE) --- */
+        /* --- 0. BACKGROUND TRACER --- */
         .svg-bg-tracer {{
             position: absolute;
             width: 480px; height: 480px;
@@ -75,48 +75,34 @@ def render_jarvis_ui(state="idle"):
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- 1. THE JAGGED TRACER (INFINITE PURSUIT) --- */
+        /* --- 1. THE JAGGED TRACER (SOLID - NO FADE) --- */
         .svg-complex-tracer {{
             position: absolute;
             width: 380px; height: 380px;
             z-index: 5;
-            /* Rotate the container slowly to add chaos to the chase */
-            animation: spin-slow 20s linear infinite;
+            animation: spin-slow 45s linear infinite;
         }}
 
-        /* PATH GEOMETRY NOTE:
-           The total length of this jagged path is approx 1500 units.
-           To make them loop infinitely without fading, we use stroke-dashoffset
-           scrolling from 0 to -1500.
-        */
-
-        /* Trace 1: White Leader (Fast & Short) */
+        /* Trace 1: White Leader (Thin) */
         .trace-white {{
             fill: none;
             stroke: #ffffff;
-            stroke-width: 2;
+            stroke-width: 1.5;
             stroke-linecap: round;
-            
-            /* Dash: 150px solid, 1350px gap */
-            stroke-dasharray: 150 1500; 
-            
-            /* 3s Duration (Faster than color) */
-            animation: trace-infinite 3s linear infinite;
+            /* Gap (2000) is larger than path (~1300) so it hides completely */
+            stroke-dasharray: 600 2000; 
+            animation: trace-jagged 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }}
 
-        /* Trace 2: Color Follower (Heavy & Dragging) */
+        /* Trace 2: Color Follower (Thick) */
         .trace-color {{
             fill: none;
             stroke: {c};
-            stroke-width: 6;
+            stroke-width: 5;
             stroke-linecap: square;
-            filter: drop-shadow(0 0 10px {c});
-            
-            /* Dash: 500px solid, 1000px gap */
-            stroke-dasharray: 500 1500;
-            
-            /* 3.2s Duration (Slightly slower - causes "lapping" effect) */
-            animation: trace-infinite 3.2s linear infinite;
+            filter: drop-shadow(0 0 8px {c});
+            stroke-dasharray: 300 2000;
+            animation: trace-jagged-lag 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }}
 
         /* --- 2. RINGS & ELEMENTS --- */
@@ -183,16 +169,29 @@ def render_jarvis_ui(state="idle"):
             100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
         }}
 
-        /* INFINITE TRACE:
-           Moves from 0 offset to -1500 (Total Length).
-           Since dasharray includes a 1500 gap, this loops seamlessly.
+        /* --- UPDATED TRACER ANIMATIONS (NO FADE) --- */
+        
+        /* The logic: 
+           Start at positive offset (Hidden "before" the path).
+           Move to negative offset (Hidden "after" the path).
+           The gap in the dasharray (2000) ensures it's invisible at both ends.
+           No opacity changes needed.
         */
-        @keyframes trace-infinite {{
-            0% {{ stroke-dashoffset: 1500; }}
-            100% {{ stroke-dashoffset: 0; }}
+        
+        @keyframes trace-jagged {{
+            0% {{ stroke-dashoffset: 1300; }}
+            40% {{ stroke-dashoffset: 0; }} 
+            60% {{ stroke-dashoffset: -1300; }}
+            100% {{ stroke-dashoffset: -1300; }}
+        }}
+        
+        @keyframes trace-jagged-lag {{
+            0% {{ stroke-dashoffset: 1450; }} /* Starts further back */
+            40% {{ stroke-dashoffset: 150; }} /* Arrives at '0' later */
+            60% {{ stroke-dashoffset: -1150; }}
+            100% {{ stroke-dashoffset: -1150; }}
         }}
 
-        /* MORPH LOGIC: SHARPER SHURIKEN */
         @keyframes morph-north {{
             0%, 100% {{ transform: translate(-50%, -200px); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
             50% {{ transform: translate(-50%, -260px); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
@@ -243,9 +242,7 @@ def render_jarvis_ui(state="idle"):
                      Z
                    " />
                 </defs>
-                
                 <use href="#jaggedShape" class="trace-white" />
-                
                 <use href="#jaggedShape" class="trace-color" />
             </svg>
 
