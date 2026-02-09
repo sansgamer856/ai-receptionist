@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v11.0 UI (Synched Jagged Tracer).
+    Renders the N.A.O.M.I v12.0 UI (Infinite Jagged Loop).
     """
     
     # --- COLOR PALETTE ---
@@ -58,7 +58,7 @@ def render_jarvis_ui(state="idle"):
             animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 0. BACKGROUND TRACER (SIMPLE) --- */
+        /* --- 0. BACKGROUND TRACER --- */
         .svg-bg-tracer {{
             position: absolute;
             width: 480px; height: 480px;
@@ -75,38 +75,35 @@ def render_jarvis_ui(state="idle"):
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- 1. THE JAGGED TRACER (BETWEEN RINGS) --- */
+        /* --- 1. THE INFINITE JAGGED TRACER --- */
         .svg-complex-tracer {{
             position: absolute;
             width: 380px; height: 380px;
             z-index: 5;
-            /* Rotate the whole shape slowly so it's not static */
-            animation: spin-slow 45s linear infinite;
+            /* Slow rotation of the entire track for dynamism */
+            animation: spin-slow 60s linear infinite;
         }}
 
-        /* PATH GEOMETRY: 
-           A circle approx r=190, but with jagged steps.
-           Total length is approx 1300 units.
+        /* PATH MATH:
+           The Jagged shape is approx 1300 units long.
+           To make it loop seamlessly, DashArray + Gap must = 1300.
         */
 
-        /* Trace 1: White Leader (Thin) */
+        /* Trace 1: White Leader (The Spark) */
         .trace-white {{
             fill: none;
             stroke: #ffffff;
-            stroke-width: 1.5;
+            stroke-width: 2;
             stroke-linecap: round;
             
-            /* The Dash: 
-               Gap must be larger than total length (1300) to hide it. 
-               Dash is short (100) just to act as the "head".
-            */
-            stroke-dasharray: 600 2000; 
+            /* Dash: 50px line, 1250px gap. (Total 1300) */
+            stroke-dasharray: 50 1250; 
             
-            /* Start "Before" the line (positive offset pushes it back) */
-            animation: trace-jagged 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            /* Animate offset from 0 to -1300 to loop */
+            animation: infinite-run 4s linear infinite;
         }}
 
-        /* Trace 2: Color Follower (Thick) */
+        /* Trace 2: Color Follower (The Tail) */
         .trace-color {{
             fill: none;
             stroke: {c};
@@ -114,19 +111,20 @@ def render_jarvis_ui(state="idle"):
             stroke-linecap: square;
             filter: drop-shadow(0 0 8px {c});
             
-            /* The Dash:
-               A shorter segment (300) following the white one.
-            */
-            stroke-dasharray: 300 2000;
+            /* Dash: 300px line, 1000px gap. (Total 1300) */
+            stroke-dasharray: 300 1000;
             
-            /* Same animation timing, but we adjust the dashoffset in the keyframe
-               or start with a different initial offset? 
-               actually, if we use the same keyframe, we just need to delay the phase 
-               visually by offsetting the dasharray pattern. 
+            /* SYNCING:
+               To make the Color chase the White, we offset the animation delay?
+               No, smoother to just offset the start position.
                
-               BETTER: Use the EXACT same animation, but add a 'lag' via calculation.
+               If White starts at offset 0.
+               Color should start "behind" it. 
+               Adding a positive dashoffset pushes the pattern back.
+               Let's set dashoffset start to 60 (just behind white's 50px tail).
             */
-            animation: trace-jagged-lag 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            stroke-dashoffset: 60;
+            animation: infinite-run-chase 4s linear infinite;
         }}
 
         /* --- 2. RINGS & ELEMENTS --- */
@@ -193,28 +191,20 @@ def render_jarvis_ui(state="idle"):
             100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
         }}
 
-        /* TRACE ANIMATION (JAGGED)
-           Total path length approx 1300.
-           We move the dashoffset from Positive (hidden start) to Negative (hidden end).
-        */
-        @keyframes trace-jagged {{
-            0% {{ stroke-dashoffset: 1300; opacity: 1; }}
-            40% {{ stroke-dashoffset: 0; opacity: 1; }} 
-            60% {{ stroke-dashoffset: -1300; opacity: 1; }}
-            100% {{ stroke-dashoffset: -1300; opacity: 0; }}
+        /* INFINITE LOOPS */
+        /* Path length 1300. We move -1300 units to complete one cycle visually */
+        @keyframes infinite-run {{
+            0% {{ stroke-dashoffset: 0; }}
+            100% {{ stroke-dashoffset: -1300; }}
         }}
         
-        /* The Lagging line needs to start slightly later in the physical space.
-           By adding to the offset start/end points, we shift it spatially behind.
-        */
-        @keyframes trace-jagged-lag {{
-            0% {{ stroke-dashoffset: 1450; opacity: 0; }} /* Starts further back */
-            10% {{ opacity: 1; }}
-            40% {{ stroke-dashoffset: 150; }} /* Arrives at '0' later */
-            60% {{ stroke-dashoffset: -1150; opacity: 1; }}
-            100% {{ stroke-dashoffset: -1150; opacity: 0; }}
+        /* Chase needs to start at offset 60, and end at 60-1300 = -1240 */
+        @keyframes infinite-run-chase {{
+            0% {{ stroke-dashoffset: 60; }}
+            100% {{ stroke-dashoffset: -1240; }}
         }}
 
+        /* MORPH LOGIC */
         @keyframes morph-north {{
             0%, 100% {{ transform: translate(-50%, -200px); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
             50% {{ transform: translate(-50%, -260px); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
@@ -232,6 +222,10 @@ def render_jarvis_ui(state="idle"):
             50% {{ transform: translate(-260px, -50%) rotate(-90deg); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
         }}
 
+        /* THINKING STATE: Speed up the infinite run */
+        .thinking .trace-white {{ animation-duration: 1s; }}
+        .thinking .trace-color {{ animation-duration: 1s; }}
+        
         .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
         @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
 
