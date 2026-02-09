@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v9.0 UI (Morphing Geometry).
+    Renders the N.A.O.M.I v10.0 UI (Shuriken & Lag Trace).
     """
     
     # --- COLOR PALETTE ---
@@ -43,11 +43,11 @@ def render_jarvis_ui(state="idle"):
             align-items: center;
         }}
 
-        /* --- TITLE (SMALLER) --- */
+        /* --- TITLE (Larger: 26px) --- */
         .core-text {{
             position: absolute;
             z-index: 20;
-            font-size: 20px; /* Smaller */
+            font-size: 26px; /* BUMPED UP */
             font-weight: 900;
             letter-spacing: 6px;
             background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
@@ -58,28 +58,51 @@ def render_jarvis_ui(state="idle"):
             animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 0. BACKGROUND TRACER (SVG) --- */
-        /* Creates and removes the circle continuously */
+        /* --- 0. BACKGROUND TRACER (Simple Circle) --- */
         .svg-tracer {{
             position: absolute;
             width: 480px; height: 480px;
             z-index: 0;
             animation: spin-slow 30s linear infinite;
         }}
-        
         .tracer-path {{
-            fill: none;
-            stroke: {c};
-            stroke-width: 2;
-            stroke-linecap: round;
-            /* Dasharray: Gap is circumference (~1445 for r=230) */
-            stroke-dasharray: 1445; 
-            stroke-dashoffset: 1445; /* Start hidden */
-            opacity: 0.5;
+            fill: none; stroke: {c}; stroke-width: 2;
+            stroke-dasharray: 1445; stroke-dashoffset: 1445;
+            opacity: 0.3;
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- 1. THE SPLIT-ARC RING --- */
+        /* --- NEW: DOUBLE LAG TRACER (Complex Hex Shape) --- */
+        .svg-lag {{
+            position: absolute;
+            width: 560px; height: 560px; /* Large outer layer */
+            z-index: 1;
+        }}
+        
+        /* The path definition is shared, but properties differ */
+        .lag-path-white {{
+            fill: none;
+            stroke: #ffffff;
+            stroke-width: 1;
+            opacity: 0.6;
+            stroke-linecap: round;
+            stroke-dasharray: 200 1000; /* Short dash, long gap */
+            animation: spin-lag 8s linear infinite;
+        }}
+        
+        .lag-path-color {{
+            fill: none;
+            stroke: {c};
+            stroke-width: 5; /* Thicker */
+            opacity: 1;
+            stroke-linecap: square;
+            stroke-dasharray: 100 1100; /* Shorter dash */
+            /* Animation is slightly delayed/offset to create "Lag" */
+            animation: spin-lag 8s linear infinite; 
+            animation-delay: 0.15s; /* The Lag Factor */
+        }}
+
+        /* --- 1. SPLIT-ARC RING --- */
         .ring-arc {{
             position: absolute;
             width: 240px; height: 240px;
@@ -91,7 +114,7 @@ def render_jarvis_ui(state="idle"):
             animation: spin-smooth 20s linear infinite;
         }}
 
-        /* --- 2. THE RULER SCALE --- */
+        /* --- 2. RULER SCALE --- */
         .ring-scale {{
             position: absolute;
             width: 320px; height: 320px;
@@ -103,36 +126,28 @@ def render_jarvis_ui(state="idle"):
             animation: spin-reverse 40s linear infinite;
         }}
 
-        /* --- 3. MORPHING TRIANGLES -> STARS --- */
+        /* --- 3. MORPHING SHURIKENS (8-Point Polygon Logic) --- */
         .ring-cardinal {{
             position: absolute;
             width: 100%; height: 100%;
             pointer-events: none;
         }}
 
-        /* The container for each morphing element */
         .cardinal-point {{
             position: absolute;
             left: 50%; top: 50%;
-            width: 40px; height: 40px;
+            width: 50px; height: 50px;
             background: {c};
-            
-            /* Initial shape: Triangle (Arrowhead) */
-            /* Using 4 points to match the Star's 4 points for smooth morphing */
-            clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%);
-            
-            /* Center the pivot */
             transform-origin: center center;
-            box-shadow: 0 0 15px {c};
+            box-shadow: 0 0 10px {c};
+            /* Start: Triangle (Mapped to 8 points) */
+            clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%);
         }}
 
-        /* Animations for each direction */
-        /* They Move OUT and Morph shape, then Move IN and Revert */
-        
-        .north {{ animation: morph-north 6s ease-in-out infinite; }}
-        .south {{ animation: morph-south 6s ease-in-out infinite; }}
-        .east  {{ animation: morph-east  6s ease-in-out infinite; }}
-        .west  {{ animation: morph-west  6s ease-in-out infinite; }}
+        .north {{ animation: morph-north 6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }}
+        .south {{ animation: morph-south 6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }}
+        .east  {{ animation: morph-east  6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }}
+        .west  {{ animation: morph-west  6s cubic-bezier(0.4, 0, 0.2, 1) infinite; }}
 
         /* --- 4. OUTER DASHED --- */
         .ring-dashed {{
@@ -150,32 +165,45 @@ def render_jarvis_ui(state="idle"):
         @keyframes spin-reverse {{ 100% {{ transform: rotate(-360deg); }} }}
         @keyframes text-shimmer {{ 0% {{ background-position: 200% center; }} 100% {{ background-position: -200% center; }} }}
 
-        /* TRACER: Draws (0 to Full) then Erases (Full to 0 offset/gap) */
+        /* TRACER LOGIC */
         @keyframes trace-circle {{
-            0% {{ stroke-dasharray: 0 1445; stroke-dashoffset: 0; }} /* Empty */
-            50% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: 0; }} /* Full Circle Drawn */
-            100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }} /* Circle "Erased" by offset */
+            0% {{ stroke-dasharray: 0 1445; stroke-dashoffset: 0; }}
+            50% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: 0; }}
+            100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
+        }}
+        
+        /* THE LAG CHASE ANIMATION */
+        @keyframes spin-lag {{
+            0% {{ stroke-dashoffset: 1200; transform: rotate(0deg); }}
+            100% {{ stroke-dashoffset: 0; transform: rotate(360deg); }}
         }}
 
-        /* MORPH LOGIC: 
-           Translate moves it OUT.
-           Clip-path changes from Triangle (Arrow) to Star (Diamond Spike).
+        /* MORPH LOGIC (Triangle -> Shuriken)
+           Triangle: 50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%
+           Shuriken: 50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%
         */
+
         @keyframes morph-north {{
-            0%, 100% {{ transform: translate(-50%, -200px) rotate(0deg); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }} /* In (Triangle) */
-            50% {{ transform: translate(-50%, -260px) rotate(0deg); clip-path: polygon(50% 0%, 80% 50%, 50% 100%, 20% 50%); }} /* Out (Star) */
+            0%, 100% {{ 
+                transform: translate(-50%, -190px) rotate(0deg); 
+                clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%); 
+            }}
+            50% {{ 
+                transform: translate(-50%, -260px) rotate(0deg) scale(1.2); 
+                clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%); /* Shuriken */
+            }}
         }}
         @keyframes morph-south {{
-            0%, 100% {{ transform: translate(-50%, 160px) rotate(180deg); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
-            50% {{ transform: translate(-50%, 220px) rotate(180deg); clip-path: polygon(50% 0%, 80% 50%, 50% 100%, 20% 50%); }}
+            0%, 100% {{ transform: translate(-50%, 150px) rotate(180deg); clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%); }}
+            50% {{ transform: translate(-50%, 220px) rotate(180deg) scale(1.2); clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%); }}
         }}
         @keyframes morph-east {{
-            0%, 100% {{ transform: translate(160px, -50%) rotate(90deg); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
-            50% {{ transform: translate(220px, -50%) rotate(90deg); clip-path: polygon(50% 0%, 80% 50%, 50% 100%, 20% 50%); }}
+            0%, 100% {{ transform: translate(150px, -50%) rotate(90deg); clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%); }}
+            50% {{ transform: translate(220px, -50%) rotate(90deg) scale(1.2); clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%); }}
         }}
         @keyframes morph-west {{
-            0%, 100% {{ transform: translate(-200px, -50%) rotate(-90deg); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
-            50% {{ transform: translate(-260px, -50%) rotate(-90deg); clip-path: polygon(50% 0%, 80% 50%, 50% 100%, 20% 50%); }}
+            0%, 100% {{ transform: translate(-190px, -50%) rotate(-90deg); clip-path: polygon(50% 0%, 50% 0%, 100% 100%, 50% 80%, 50% 100%, 50% 80%, 0% 100%, 50% 0%); }}
+            50% {{ transform: translate(-260px, -50%) rotate(-90deg) scale(1.2); clip-path: polygon(50% 0%, 65% 35%, 100% 50%, 65% 65%, 50% 100%, 35% 65%, 0% 50%, 35% 35%); }}
         }}
 
         /* --- STATE LOGIC --- */
@@ -188,6 +216,11 @@ def render_jarvis_ui(state="idle"):
     <body>
         <div class="reactor {state}">
             
+            <svg class="svg-lag" viewBox="0 0 600 600">
+                 <path class="lag-path-white" d="M300,50 L516.5,175 L516.5,425 L300,550 L83.5,425 L83.5,175 Z" />
+                 <path class="lag-path-color" d="M300,50 L516.5,175 L516.5,425 L300,550 L83.5,425 L83.5,175 Z" />
+            </svg>
+
             <svg class="svg-tracer" viewBox="0 0 500 500">
                 <circle class="tracer-path" cx="250" cy="250" r="230" />
             </svg>
