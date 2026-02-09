@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL
-MODEL_NAME = 'gemini-2.0-flash' 
+MODEL_NAME = 'gemini-3-flash-preview' 
 
 # IDs
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
@@ -90,7 +90,6 @@ def switch_api_key():
     if len(api_keys) <= 1: return False
     current_key_index = (current_key_index + 1) % len(api_keys)
     genai.configure(api_key=api_keys[current_key_index])
-    print(f"🔄 Switched to API Key #{current_key_index + 1}")
     return True
 
 def get_current_time():
@@ -101,6 +100,7 @@ def get_date_range(date_str, days=1):
     tz = pytz.timezone(TIMEZONE)
     now = datetime.datetime.now(tz)
     
+    # Defaults
     if date_str.lower() == "today":
         start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif date_str.lower() == "tomorrow":
@@ -110,7 +110,8 @@ def get_date_range(date_str, days=1):
             dt = datetime.datetime.strptime(date_str, "%Y-%m-%d")
             start_dt = tz.localize(dt)
         except:
-            return None, None
+            # If parsing fails, default to today
+             start_dt = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     end_dt = start_dt + datetime.timedelta(days=days)
     return start_dt.isoformat(), end_dt.isoformat()
@@ -127,10 +128,6 @@ def format_event_time(iso_str):
         return iso_str 
 
 def parse_smart_time(time_input, original_date_obj=None):
-    """
-    Parses fuzzy time strings (e.g. "15:00", "3pm", "3:00 PM")
-    and combines them with the original event date.
-    """
     tz = pytz.timezone(TIMEZONE)
     time_input = time_input.strip().upper()
 
@@ -177,7 +174,6 @@ def list_upcoming_events(max_results: float = 50):
 def check_schedule(date_str: str = "today"):
     try:
         start_iso, end_iso = get_date_range(date_str)
-        if not start_iso: return "Error: Date must be YYYY-MM-DD, 'today', or 'tomorrow'."
         print(f"👀 Checking schedule from {start_iso} to {end_iso}...")
         events_result = calendar_service.events().list(
             calendarId=CALENDAR_ID, timeMin=start_iso, timeMax=end_iso, singleEvents=True, orderBy='startTime'
@@ -226,21 +222,24 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
 
 def update_event(keyword: str, date_str: str = "today", new_start_time: str = None, new_title: str = None):
     try:
-        start_iso, end_iso = get_date_range(date_str, days=2)
-        if not start_iso: return "Error: Invalid date."
+        # SEARCH LOGIC: If date is "today", search next 7 days to be helpful. 
+        days_to_search = 7 if date_str.lower() == "today" else 2
+        start_iso, end_iso = get_date_range(date_str, days=days_to_search)
 
-        print(f"🔄 Searching to update '{keyword}' around {date_str}...")
+        print(f"🔄 Searching to update '{keyword}' in range {start_iso} - {end_iso}...")
         events_result = calendar_service.events().list(
             calendarId=CALENDAR_ID, timeMin=start_iso, timeMax=end_iso, q=keyword, singleEvents=True
         ).execute()
 
         events = events_result.get('items', [])
-        if not events: return f"Could not find any event matching '{keyword}' on {date_str}."
+        if not events: return f"Could not find any event matching '{keyword}' in the next {days_to_search} days."
 
+        # Pick first match
         target_event = events[0]
         event_id = target_event['id']
         current_summary = target_event.get('summary', 'No Title')
         
+        # Get current start for relative time calculation
         current_start_raw = target_event['start'].get('dateTime', target_event['start'].get('date'))
         current_start_dt = None
         if 'T' in current_start_raw:
@@ -263,7 +262,7 @@ def update_event(keyword: str, date_str: str = "today", new_start_time: str = No
             else:
                 return f"Error: Could not understand time '{new_start_time}'."
 
-        if not changes: return "Found event, but no changes were understood."
+        if not changes: return "Found event, but no changes were requested."
 
         calendar_service.events().patch(calendarId=CALENDAR_ID, eventId=event_id, body=changes).execute()
         return f"Success: Updated '{current_summary}'. ({', '.join(updated_log)})"
@@ -273,7 +272,6 @@ def update_event(keyword: str, date_str: str = "today", new_start_time: str = No
 def delete_events(date_str: str = "today", keyword: str = ""):
     try:
         start_iso, end_iso = get_date_range(date_str)
-        if not start_iso: return "Error: Invalid date."
         print(f"🗑️ Deleting events from {start_iso} to {end_iso} | Keyword: '{keyword}'")
 
         events_result = calendar_service.events().list(
@@ -322,111 +320,101 @@ tool_map = {
     'send_notification': send_notification
 }
 
-# --- AI BRAIN (V2.3 - Stability Update) ---
+# --- AI BRAIN (V2.4 - Robust Architecture) ---
 def process_message(user_input, chat_history):
     if user_input.upper().strip() in ["STOP", "CANCEL", "RESET", "END"]:
         return "🛑 Process Stopped."
 
-    # Condensed System Instruction (Saves Tokens & Speed)
     system_instruction = f"""
     You are a receptionist. Manage tasks using: {', '.join(VALID_TYPES)} and {', '.join(VALID_CATEGORIES)}.
     Tools:
     - add_to_schedule: Create events.
-    - update_event: Change time/title. Accepts simple times (e.g. "3pm").
+    - update_event: Change time/title. (Searches next 7 days by default).
     - delete_events: Remove events.
     - list_upcoming_events: Show future events.
     - check_schedule: Show specific day.
     
     Notes:
-    - If a tool fails, Report the error. DO NOT retry.
+    - If a tool fails, report the error. DO NOT retry.
     - Be concise.
     """
 
+    # --- PART 1: THINKING (API Call with Retry) ---
     max_retries = 3
     attempts = 0
-
+    response = None
+    
     while attempts < max_retries:
         try:
-            # 1. Enforce Rate Limit (Wait 2s before every call)
-            time.sleep(2) 
-
+            time.sleep(1) # Rate Limit Safety
             model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
             chat = model.start_chat(enable_automatic_function_calling=False)
             
             date_context = f" [System Info: NY Time: {get_current_time()}]"
             augmented_input = user_input + date_context
             
-            # 2. Send Message
             response = chat.send_message(augmented_input)
+            break # Success, exit retry loop
             
-            # 3. Process Tool Calls
-            function_calls_found = []
-            seen_calls = set()
-
-            for part in response.parts:
-                if part.function_call:
-                    fc = part.function_call
-                    signature = (fc.name, json.dumps(dict(fc.args), sort_keys=True))
-                    if signature not in seen_calls:
-                        function_calls_found.append(fc)
-                        seen_calls.add(signature)
-            
-            if function_calls_found:
-                function_responses = []
-                all_results_text = []
-
-                for fc in function_calls_found:
-                    func_name = fc.name
-                    args = dict(fc.args)
-                    print(f"🤖 Gemini Request: {func_name} | Args: {args}")
-                    
-                    if func_name in tool_map:
-                        try:
-                            result = tool_map[func_name](**args)
-                        except Exception as tool_e:
-                            result = f"Error executing {func_name}: {str(tool_e)}"
-                    else:
-                        result = f"Error: Function {func_name} not found."
-                    
-                    print(f"✅ Tool Result: {result}")
-                    all_results_text.append(result)
-
-                    function_responses.append({
-                        "function_response": {
-                            "name": func_name,
-                            "response": {"result": result}
-                        }
-                    })
-                
-                # 4. Send Results (Retry on 504/Timeout errors specifically here)
-                try:
-                    time.sleep(1) # Extra pause before summary
-                    final_response = chat.send_message(function_responses)
-                    text = final_response.text
-                    if not text or len(text.strip()) < 2:
-                        return f"✅ Actions completed:\n" + "\n".join(all_results_text)
-                    return text
-                except (DeadlineExceeded, ServiceUnavailable):
-                     # If summary fails, just return the raw results. Don't crash.
-                    return f"✅ Actions completed (Summary Unavailable due to Timeout):\n" + "\n".join(all_results_text)
-                except Exception:
-                    return f"✅ Actions completed:\n" + "\n".join(all_results_text)
-
-            else:
-                return response.text
-
-        # 5. Handle Specific Rate Limit / Timeout Errors
         except (ResourceExhausted, DeadlineExceeded, ServiceUnavailable):
-            print(f"⚠️ API Limit/Timeout. Switching Key or Retrying... (Attempt {attempts+1})")
-            if switch_api_key():
-                attempts += 1
-                time.sleep(2) # Longer wait on retry
-                continue
-            else:
-                return "⚠️ Error: System is busy or quota exceeded. Please wait 1 minute."
-        
+            print(f"⚠️ API Busy. Retrying ({attempts+1}/{max_retries})...")
+            switch_api_key()
+            attempts += 1
+            time.sleep(2)
         except Exception as e:
-            traceback.print_exc()
-            return f"⚠️ System Error: {str(e)}"
+            return f"⚠️ Connection Error: {str(e)}"
+
+    if not response:
+        return "⚠️ Error: AI Service is currently unavailable."
+
+    # --- PART 2: ACTING (Tool Execution - NO RETRY) ---
+    # We do not wrap this in a loop. If logic fails, we show the error.
     
-    return "⚠️ Error: Request failed after multiple attempts."
+    function_calls_found = []
+    seen_calls = set()
+
+    for part in response.parts:
+        if part.function_call:
+            fc = part.function_call
+            signature = (fc.name, json.dumps(dict(fc.args), sort_keys=True))
+            if signature not in seen_calls:
+                function_calls_found.append(fc)
+                seen_calls.add(signature)
+    
+    if function_calls_found:
+        function_responses = []
+        all_results_text = []
+
+        for fc in function_calls_found:
+            func_name = fc.name
+            args = dict(fc.args)
+            print(f"🤖 Action: {func_name} | Args: {args}")
+            
+            if func_name in tool_map:
+                try:
+                    result = tool_map[func_name](**args)
+                except Exception as tool_e:
+                    result = f"Error executing {func_name}: {str(tool_e)}"
+            else:
+                result = f"Error: Function {func_name} not found."
+            
+            print(f"✅ Result: {result}")
+            all_results_text.append(result)
+
+            function_responses.append({
+                "function_response": {
+                    "name": func_name,
+                    "response": {"result": result}
+                }
+            })
+        
+        # --- PART 3: SUMMARIZING (Optional) ---
+        try:
+            final_response = chat.send_message(function_responses)
+            return final_response.text
+        except:
+            # If summary fails (timeout), just return the raw results.
+            return f"✅ Actions completed:\n" + "\n".join(all_results_text)
+
+    else:
+        return response.text
