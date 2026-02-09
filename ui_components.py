@@ -3,12 +3,12 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v7.0 UI (Machined Tech Edition).
+    Renders the N.A.O.M.I v7.0 UI (Erratic Tech Ring).
     """
     
     # --- COLOR PALETTE ---
     colors = {
-        "idle": "#00f3ff",      # Cyan
+        "idle": "#00f3ff",     # Cyan
         "listening": "#d600ff", # Neon Purple
         "thinking": "#ffaa00",  # Amber/Gold
         "speaking": "#ffffff"   # White
@@ -36,14 +36,14 @@ def render_jarvis_ui(state="idle"):
 
         .reactor {{
             position: relative;
-            width: 600px;
-            height: 600px;
+            width: 500px;
+            height: 500px;
             display: flex;
             justify-content: center;
             align-items: center;
         }}
 
-        /* --- 1. THE TITLE (UNTOUCHED) --- */
+        /* --- THE TITLE (PRESERVED PERFECT GLISTEN) --- */
         .core-text {{
             position: absolute;
             z-index: 20;
@@ -51,138 +51,131 @@ def render_jarvis_ui(state="idle"):
             font-weight: 900;
             letter-spacing: 8px;
             
-            /* The "Glisten" Gradient */
-            background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
+            /* The "Loading" Gradient Mask */
+            background: linear-gradient(
+                90deg, 
+                {c}40 0%, 
+                {c} 50%, 
+                {c}40 100%
+            );
             background-size: 200% auto;
-            color: #000;
+            color: #000; /* Fallback */
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             
             animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 2. THE THICK TECH RING (WITH EXTRUSIONS) --- */
-        .tech-ring-container {{
+        /* --- 1. MEDIUM SOLID RADIAL LINE --- */
+        .ring-solid {{
             position: absolute;
-            width: 300px; height: 300px; /* Padding around text */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            
-            /* The "Random" Movement Animation */
-            animation: variable-spin-1 20s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-        }}
-        
-        /* The Base Solid Ring */
-        .tech-ring-base {{
-            position: absolute;
-            width: 100%; height: 100%;
+            width: 220px; height: 220px;
             border-radius: 50%;
-            border: 12px solid {c}; /* Thick Solid Line */
-            box-shadow: 0 0 20px {c}40;
-            opacity: 0.8;
+            border: 4px solid {c}; /* Medium thickness */
+            opacity: 1; /* Solid 100% */
+            box-shadow: 0 0 10px {c}40;
+            
+            /* Erratic Movement 1 */
+            animation: erratic-spin-1 12s cubic-bezier(0.68, -0.6, 0.32, 1.6) infinite;
         }}
 
-        /* The Extrusions (Tech Teeth) */
-        /* We use a conic gradient to paint "blocks" on top of the border */
-        .tech-ring-extrusions {{
+        /* --- 2. TECH EXTRUSIONS (UNIQUE ELEMENTS) --- */
+        .ring-tech {{
             position: absolute;
-            width: 340px; height: 340px; /* Slightly larger than base to "extrude" */
+            width: 250px; height: 250px; /* Hugs the medium line closely */
             border-radius: 50%;
             
+            /* Creating the "Extruding Elements" using Conic Gradients */
+            /* This makes solid blocks (100% opacity) of varying sizes */
             background: conic-gradient(
                 transparent 0deg 10deg,
-                {c} 10deg 25deg,       /* Block 1 */
-                transparent 25deg 50deg,
-                {c} 50deg 55deg,       /* Small Block */
-                transparent 55deg 120deg,
-                {c} 120deg 160deg,     /* Large Block */
-                transparent 160deg 240deg,
-                {c} 240deg 250deg,     /* Small Block */
-                transparent 250deg 300deg,
-                {c} 300deg 330deg,     /* Medium Block */
-                transparent 330deg 360deg
+                {c} 10deg 15deg,   /* Block 1 */
+                transparent 15deg 40deg,
+                {c} 40deg 50deg,   /* Block 2 (Larger) */
+                transparent 50deg 90deg,
+                {c} 90deg 92deg,   /* Block 3 (Tiny) */
+                transparent 92deg 140deg,
+                {c} 140deg 160deg, /* Block 4 (Huge) */
+                transparent 160deg 200deg,
+                {c} 200deg 205deg, /* Block 5 */
+                transparent 205deg 260deg,
+                {c} 260deg 275deg, /* Block 6 */
+                transparent 275deg 360deg
             );
             
-            /* Mask center to turn the pie chart into a ring of blocks */
-            -webkit-mask: radial-gradient(farthest-side, transparent 60%, black 61%);
-            mask: radial-gradient(farthest-side, transparent 60%, black 61%);
+            /* Mask center to turn the pie chart into a ring with blocks */
+            -webkit-mask: radial-gradient(farthest-side, transparent 75%, black 76%);
+            mask: radial-gradient(farthest-side, transparent 75%, black 76%);
             
-            opacity: 0.8;
+            /* Erratic Movement 2 (Different timing) */
+            animation: erratic-spin-2 9s cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
         }}
 
-        /* --- 3. THE THIN OUTER LINE --- */
-        .outer-ring-container {{
+        /* --- 3. THINNER OUTER LINE --- */
+        .ring-thin {{
             position: absolute;
-            width: 380px; height: 380px;
-            
-            /* Different Speed/Direction Logic */
-            animation: variable-spin-2 25s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
-        }}
-
-        .outer-line {{
-            width: 100%; height: 100%;
+            width: 280px; height: 280px; /* Slightly outside the tech ring */
             border-radius: 50%;
-            border: 2px solid {c}80; /* Thin Solid Line */
+            border: 1px solid {c}; /* Thin */
+            opacity: 0.8;
             
-            /* Add a small gap to make it look technical */
-            border-left: 2px solid transparent;
-            transform: rotate(45deg);
+            /* Erratic Movement 3 */
+            animation: erratic-spin-1 15s cubic-bezier(0.68, -0.6, 0.32, 1.6) infinite reverse;
         }}
 
-        /* --- ANIMATIONS --- */
-        @keyframes text-shimmer {{ 0% {{ background-position: 200% center; }} 100% {{ background-position: -200% center; }} }}
-
-        /* COMPLEX RANDOM MOVEMENT SIMULATION 1 */
-        @keyframes variable-spin-1 {{
+        /* --- ERRATIC ANIMATIONS (Random-ish behavior) --- */
+        
+        /* Profile 1: Overshoots and reverses */
+        @keyframes erratic-spin-1 {{
             0% {{ transform: rotate(0deg); }}
-            20% {{ transform: rotate(120deg); }}    /* Fast Forward */
-            40% {{ transform: rotate(100deg); }}    /* Slow Reverse */
-            50% {{ transform: rotate(100deg); }}    /* Pause */
-            70% {{ transform: rotate(260deg); }}    /* Fast Forward */
-            85% {{ transform: rotate(240deg); }}    /* Slow Reverse */
-            100% {{ transform: rotate(360deg); }}   /* Finish Loop */
+            20% {{ transform: rotate(120deg); }} /* Fast Fwd */
+            40% {{ transform: rotate(90deg); }}  /* Short Reverse */
+            60% {{ transform: rotate(240deg); }} /* Fast Fwd */
+            80% {{ transform: rotate(220deg); }} /* Short Reverse */
+            100% {{ transform: rotate(360deg); }}
         }}
 
-        /* COMPLEX RANDOM MOVEMENT SIMULATION 2 (Offset) */
-        @keyframes variable-spin-2 {{
+        /* Profile 2: Pauses and jerks */
+        @keyframes erratic-spin-2 {{
             0% {{ transform: rotate(0deg); }}
-            30% {{ transform: rotate(-80deg); }}    /* Reverse */
-            50% {{ transform: rotate(-60deg); }}    /* Slow Forward */
-            60% {{ transform: rotate(-60deg); }}    /* Pause */
-            90% {{ transform: rotate(100deg); }}    /* Fast Forward */
-            100% {{ transform: rotate(0deg); }}     /* Back to start */
+            30% {{ transform: rotate(-50deg); }} /* Reverse */
+            50% {{ transform: rotate(20deg); }}  /* Fwd */
+            70% {{ transform: rotate(10deg); }}  /* Pause/Slow Reverse */
+            100% {{ transform: rotate(360deg); }}
+        }}
+
+        @keyframes text-shimmer {{ 
+            0% {{ background-position: 200% center; }} 
+            100% {{ background-position: -200% center; }} 
         }}
         
-        /* Thinking Override: Smooth Fast Spin */
-        @keyframes spin-fast {{ 100% {{ transform: rotate(360deg); }} }}
-        @keyframes spin-fast-reverse {{ 100% {{ transform: rotate(-360deg); }} }}
+        @keyframes bounce {{ 
+            0% {{ transform: scale(1); }} 
+            100% {{ transform: scale(1.02); }} 
+        }}
 
         /* --- STATE LOGIC --- */
         
-        /* THINKING: Override random motion with high-speed processing spin */
-        .thinking .tech-ring-container {{ animation: spin-fast 1s linear infinite; }}
-        .thinking .outer-ring-container {{ animation: spin-fast-reverse 2s linear infinite; }}
+        /* THINKING: Speed up drastically */
+        .thinking .ring-solid {{ animation-duration: 2s; }}
+        .thinking .ring-tech {{ animation-duration: 1.5s; }}
+        .thinking .ring-thin {{ animation-duration: 3s; }}
         
-        /* SPEAKING: Audio Bounce */
+        /* SPEAKING: Bounce */
         .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
-        @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
-
-        /* LISTENING: Slow down slightly */
-        .listening .tech-ring-container {{ animation-duration: 30s; }}
+        
+        /* LISTENING: Expand slightly */
+        .listening .ring-thin {{ transform: scale(1.1); transition: transform 1s; }}
 
     </style>
     </head>
     <body>
         <div class="reactor {state}">
-            <div class="outer-ring-container">
-                <div class="outer-line"></div>
-            </div>
+            <div class="ring-thin"></div>
 
-            <div class="tech-ring-container">
-                <div class="tech-ring-base"></div>
-                <div class="tech-ring-extrusions"></div>
-            </div>
+            <div class="ring-tech"></div>
+
+            <div class="ring-solid"></div>
 
             <div class="core-text">N.A.O.M.I.</div>
         </div>
