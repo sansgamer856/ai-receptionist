@@ -3,8 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v7.0 UI (The Monolith).
-    Minimalist. Industrial. Sharp radius changes.
+    Renders the N.A.O.M.I v7.0 UI (Machined Tech Edition).
     """
     
     # --- COLOR PALETTE ---
@@ -16,18 +15,6 @@ def render_jarvis_ui(state="idle"):
     }
     
     c = colors.get(state, colors["idle"])
-    
-    # --- SVG PATH GENERATION ---
-    # We are drawing a circle that "steps" between two radii:
-    # r1 = 180px (Inner)
-    # r2 = 230px (Outer)
-    # The path draws arcs, then cuts straight radially to the next radius.
-    
-    # This path creates a shape with 3 "Outer Tabs" and 3 "Inner Recesses"
-    # It looks like a heavy industrial lock ring.
-    svg_path = """
-    M 0 -180 
-    A 180 180 0 0 1 155.8 -90     L 199 -115                    A 230 230 0 0 1 199 115       L 155.8 90                    A 180 180 0 0 1 -155.8 90     L -199 115                    A 230 230 0 0 1 -199 -115     L -155.8 -90                  A 180 180 0 0 1 0 -180        """
     
     html_code = f"""
     <!DOCTYPE html>
@@ -47,7 +34,7 @@ def render_jarvis_ui(state="idle"):
             font-family: 'Orbitron', sans-serif;
         }}
 
-        .container {{
+        .reactor {{
             position: relative;
             width: 600px;
             height: 600px;
@@ -56,116 +43,148 @@ def render_jarvis_ui(state="idle"):
             align-items: center;
         }}
 
-        /* --- 1. THE TEXT (GLISTENING) --- */
+        /* --- 1. THE TITLE (UNTOUCHED) --- */
         .core-text {{
             position: absolute;
             z-index: 20;
-            font-size: 42px; /* Massive, bold */
+            font-size: 32px;
             font-weight: 900;
-            letter-spacing: 10px;
-            text-transform: uppercase;
+            letter-spacing: 8px;
             
-            /* The Glisten Gradient */
-            background: linear-gradient(
-                110deg, 
-                {c}40 0%, 
-                {c}40 40%, 
-                #ffffff 50%, 
-                {c}40 60%, 
-                {c}40 100%
-            );
+            /* The "Glisten" Gradient */
+            background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
             background-size: 200% auto;
-            
-            /* Text Masking */
-            color: transparent;
+            color: #000;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             
-            /* Filters for "Solid" look behind the glisten */
-            filter: drop-shadow(0 0 2px {c});
-            
-            animation: text-glisten 4s linear infinite;
+            animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 2. THE INDUSTRIAL RING (SVG) --- */
-        .svg-ring {{
+        /* --- 2. THE THICK TECH RING (WITH EXTRUSIONS) --- */
+        .tech-ring-container {{
             position: absolute;
-            width: 600px;
-            height: 600px;
-            animation: spin 30s linear infinite;
-            filter: drop-shadow(0 0 10px {c}60); /* Heavy Glow */
+            width: 300px; height: 300px; /* Padding around text */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            
+            /* The "Random" Movement Animation */
+            animation: variable-spin-1 20s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        }}
+        
+        /* The Base Solid Ring */
+        .tech-ring-base {{
+            position: absolute;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            border: 12px solid {c}; /* Thick Solid Line */
+            box-shadow: 0 0 20px {c}40;
+            opacity: 0.8;
         }}
 
-        path {{
-            fill: none;
-            stroke: {c};
-            stroke-width: 15; /* THICK solid line */
-            stroke-linecap: square; /* Sharp ends if we had them */
-            stroke-linejoin: miter; /* Sharp corners on the cuts */
+        /* The Extrusions (Tech Teeth) */
+        /* We use a conic gradient to paint "blocks" on top of the border */
+        .tech-ring-extrusions {{
+            position: absolute;
+            width: 340px; height: 340px; /* Slightly larger than base to "extrude" */
+            border-radius: 50%;
             
-            transition: stroke 0.5s ease, filter 0.5s ease;
+            background: conic-gradient(
+                transparent 0deg 10deg,
+                {c} 10deg 25deg,       /* Block 1 */
+                transparent 25deg 50deg,
+                {c} 50deg 55deg,       /* Small Block */
+                transparent 55deg 120deg,
+                {c} 120deg 160deg,     /* Large Block */
+                transparent 160deg 240deg,
+                {c} 240deg 250deg,     /* Small Block */
+                transparent 250deg 300deg,
+                {c} 300deg 330deg,     /* Medium Block */
+                transparent 330deg 360deg
+            );
+            
+            /* Mask center to turn the pie chart into a ring of blocks */
+            -webkit-mask: radial-gradient(farthest-side, transparent 60%, black 61%);
+            mask: radial-gradient(farthest-side, transparent 60%, black 61%);
+            
+            opacity: 0.8;
+        }}
+
+        /* --- 3. THE THIN OUTER LINE --- */
+        .outer-ring-container {{
+            position: absolute;
+            width: 380px; height: 380px;
+            
+            /* Different Speed/Direction Logic */
+            animation: variable-spin-2 25s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+        }}
+
+        .outer-line {{
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            border: 2px solid {c}80; /* Thin Solid Line */
+            
+            /* Add a small gap to make it look technical */
+            border-left: 2px solid transparent;
+            transform: rotate(45deg);
         }}
 
         /* --- ANIMATIONS --- */
-        @keyframes text-glisten {{
-            0% {{ background-position: 200% center; }}
-            100% {{ background-position: -200% center; }}
+        @keyframes text-shimmer {{ 0% {{ background-position: 200% center; }} 100% {{ background-position: -200% center; }} }}
+
+        /* COMPLEX RANDOM MOVEMENT SIMULATION 1 */
+        @keyframes variable-spin-1 {{
+            0% {{ transform: rotate(0deg); }}
+            20% {{ transform: rotate(120deg); }}    /* Fast Forward */
+            40% {{ transform: rotate(100deg); }}    /* Slow Reverse */
+            50% {{ transform: rotate(100deg); }}    /* Pause */
+            70% {{ transform: rotate(260deg); }}    /* Fast Forward */
+            85% {{ transform: rotate(240deg); }}    /* Slow Reverse */
+            100% {{ transform: rotate(360deg); }}   /* Finish Loop */
         }}
 
-        @keyframes spin {{
-            100% {{ transform: rotate(360deg); }}
+        /* COMPLEX RANDOM MOVEMENT SIMULATION 2 (Offset) */
+        @keyframes variable-spin-2 {{
+            0% {{ transform: rotate(0deg); }}
+            30% {{ transform: rotate(-80deg); }}    /* Reverse */
+            50% {{ transform: rotate(-60deg); }}    /* Slow Forward */
+            60% {{ transform: rotate(-60deg); }}    /* Pause */
+            90% {{ transform: rotate(100deg); }}    /* Fast Forward */
+            100% {{ transform: rotate(0deg); }}     /* Back to start */
         }}
-
-        @keyframes bounce {{ 
-            0% {{ transform: scale(1); }} 
-            100% {{ transform: scale(1.02); }} 
-        }}
+        
+        /* Thinking Override: Smooth Fast Spin */
+        @keyframes spin-fast {{ 100% {{ transform: rotate(360deg); }} }}
+        @keyframes spin-fast-reverse {{ 100% {{ transform: rotate(-360deg); }} }}
 
         /* --- STATE LOGIC --- */
         
-        /* Thinking: Spin Fast, Brighten Ring */
-        .thinking .svg-ring {{ animation-duration: 2s; }}
-        .thinking path {{ stroke: #ffaa00; stroke-width: 18; filter: drop-shadow(0 0 20px #ffaa00); }}
+        /* THINKING: Override random motion with high-speed processing spin */
+        .thinking .tech-ring-container {{ animation: spin-fast 1s linear infinite; }}
+        .thinking .outer-ring-container {{ animation: spin-fast-reverse 2s linear infinite; }}
+        
+        /* SPEAKING: Audio Bounce */
+        .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
+        @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
 
-        /* Listening: Slow spin, Pulse Text */
-        .listening .svg-ring {{ animation-duration: 60s; }}
-        .listening .core-text {{ filter: drop-shadow(0 0 15px {c}); letter-spacing: 12px; transition: letter-spacing 0.5s; }}
-
-        /* Speaking: Audio Bounce */
-        .speaking .container {{ animation: bounce 0.15s infinite alternate; }}
-        .speaking path {{ stroke: #ffffff; filter: drop-shadow(0 0 15px #00f3ff); }}
-        .speaking .core-text {{ background-image: linear-gradient(110deg, #fff 0%, #00f3ff 50%, #fff 100%); }}
+        /* LISTENING: Slow down slightly */
+        .listening .tech-ring-container {{ animation-duration: 30s; }}
 
     </style>
     </head>
     <body>
-        <div class="container {state}">
-            
-            <svg class="svg-ring" viewBox="-250 -250 500 500">
-                <path d="
-                    M 0 -180 
-                    A 180 180 0 0 1 127 -127
-                    L 162 -162               
-                    A 230 230 0 0 1 230 0    
-                    L 180 0                  
-                    A 180 180 0 0 1 127 127  
-                    L 162 162                
-                    A 230 230 0 0 1 0 230    
-                    L 0 180                  
-                    A 180 180 0 0 1 -127 127 
-                    L -162 162               
-                    A 230 230 0 0 1 -230 0   
-                    L -180 0                 
-                    A 180 180 0 0 1 -127 -127
-                    L -162 -162              
-                    A 230 230 0 0 1 0 -230   
-                    L 0 -180                 
-                    Z
-                " />
-            </svg>
+        <div class="reactor {state}">
+            <div class="outer-ring-container">
+                <div class="outer-line"></div>
+            </div>
+
+            <div class="tech-ring-container">
+                <div class="tech-ring-base"></div>
+                <div class="tech-ring-extrusions"></div>
+            </div>
 
             <div class="core-text">N.A.O.M.I.</div>
-            
         </div>
     </body>
     </html>
