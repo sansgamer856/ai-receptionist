@@ -9,7 +9,7 @@ import re
 from email.mime.text import MIMEText
 
 import google.generativeai as genai
-from google.api_core.exceptions import ResourceExhausted 
+from google.api_core.exceptions import ResourceExhausted, DeadlineExceeded, ServiceUnavailable
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # MODEL
-MODEL_NAME = 'gemini-3-flash-preview' 
+MODEL_NAME = 'gemini-2.0-flash' 
 
 # IDs
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'
@@ -90,6 +90,7 @@ def switch_api_key():
     if len(api_keys) <= 1: return False
     current_key_index = (current_key_index + 1) % len(api_keys)
     genai.configure(api_key=api_keys[current_key_index])
+    print(f"🔄 Switched to API Key #{current_key_index + 1}")
     return True
 
 def get_current_time():
@@ -131,25 +132,18 @@ def parse_smart_time(time_input, original_date_obj=None):
     and combines them with the original event date.
     """
     tz = pytz.timezone(TIMEZONE)
-    
-    # Clean input
     time_input = time_input.strip().upper()
 
-    # 1. Try Full ISO format first (in case Gemini gets it right)
     try:
         dt = datetime.datetime.fromisoformat(time_input)
         if dt.tzinfo is None: dt = tz.localize(dt)
         return dt
     except: pass
 
-    # If we don't have an original date, we can't do relative time
-    if not original_date_obj:
-        return None
+    if not original_date_obj: return None
 
     target_date = original_date_obj.date()
-
-    # 2. Try simple formats
-    formats = ["%H:%M", "%I:%M %p", "%I %p", "%I%p"] # 15:00, 3:00 PM, 3 PM, 3PM
+    formats = ["%H:%M", "%I:%M %p", "%I %p", "%I%p"] 
     
     for fmt in formats:
         try:
@@ -231,13 +225,7 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
     except Exception as e: return f"Error adding task: {str(e)}"
 
 def update_event(keyword: str, date_str: str = "today", new_start_time: str = None, new_title: str = None):
-    """
-    Updates an event. 
-    keyword: Word to search for (e.g., "Rocket").
-    new_start_time: Can be ISO "2024-02-09T15:00:00" OR simple time "15:00" / "3:00 PM".
-    """
     try:
-        # 1. Search for the event (Wide window to be safe)
         start_iso, end_iso = get_date_range(date_str, days=2)
         if not start_iso: return "Error: Invalid date."
 
@@ -253,7 +241,6 @@ def update_event(keyword: str, date_str: str = "today", new_start_time: str = No
         event_id = target_event['id']
         current_summary = target_event.get('summary', 'No Title')
         
-        # Get current start time object (for relative time calculation)
         current_start_raw = target_event['start'].get('dateTime', target_event['start'].get('date'))
         current_start_dt = None
         if 'T' in current_start_raw:
@@ -262,25 +249,19 @@ def update_event(keyword: str, date_str: str = "today", new_start_time: str = No
         changes = {}
         updated_log = []
 
-        # 2. Handle Title Change
         if new_title:
             changes['summary'] = new_title
             updated_log.append(f"Title -> {new_title}")
 
-        # 3. Handle Time Change (The Tricky Part)
         if new_start_time and current_start_dt:
-            # Use our smart parser
             new_dt = parse_smart_time(new_start_time, current_start_dt)
-            
             if new_dt:
-                # Default duration is 1 hour unless we calculate the old duration (skipped for simplicity)
                 end_dt = new_dt + datetime.timedelta(hours=1)
-                
                 changes['start'] = {'dateTime': new_dt.isoformat(), 'timeZone': TIMEZONE}
                 changes['end'] = {'dateTime': end_dt.isoformat(), 'timeZone': TIMEZONE}
                 updated_log.append(f"Time -> {format_event_time(new_dt.isoformat())}")
             else:
-                return f"Error: Could not understand the time format '{new_start_time}'. Try '15:00' or '3:00 PM'."
+                return f"Error: Could not understand time '{new_start_time}'."
 
         if not changes: return "Found event, but no changes were understood."
 
@@ -341,33 +322,44 @@ tool_map = {
     'send_notification': send_notification
 }
 
-# --- AI BRAIN ---
+# --- AI BRAIN (V2.3 - Stability Update) ---
 def process_message(user_input, chat_history):
     if user_input.upper().strip() in ["STOP", "CANCEL", "RESET", "END"]:
         return "🛑 Process Stopped."
 
-    max_retries = len(api_keys) + 1 
-    attempts = 0
-
+    # Condensed System Instruction (Saves Tokens & Speed)
     system_instruction = f"""
-    You are a smart receptionist.
-    1. Manage tasks using: {', '.join(VALID_TYPES)} and {', '.join(VALID_CATEGORIES)}.
-    2. To UPDATE an event, use 'update_event'. 
-       - You can send simple times like "3:00 PM" or "15:00" for the new_start_time.
-    3. If a tool fails, report the error. DO NOT retry endlessly.
+    You are a receptionist. Manage tasks using: {', '.join(VALID_TYPES)} and {', '.join(VALID_CATEGORIES)}.
+    Tools:
+    - add_to_schedule: Create events.
+    - update_event: Change time/title. Accepts simple times (e.g. "3pm").
+    - delete_events: Remove events.
+    - list_upcoming_events: Show future events.
+    - check_schedule: Show specific day.
+    
+    Notes:
+    - If a tool fails, Report the error. DO NOT retry.
+    - Be concise.
     """
+
+    max_retries = 3
+    attempts = 0
 
     while attempts < max_retries:
         try:
+            # 1. Enforce Rate Limit (Wait 2s before every call)
+            time.sleep(2) 
+
             model = genai.GenerativeModel(model_name=MODEL_NAME, tools=tools, system_instruction=system_instruction)
             chat = model.start_chat(enable_automatic_function_calling=False)
             
-            date_context = f" [System Info: Current NY Time is {get_current_time()}]"
+            date_context = f" [System Info: NY Time: {get_current_time()}]"
             augmented_input = user_input + date_context
             
+            # 2. Send Message
             response = chat.send_message(augmented_input)
             
-            # Extract Function Calls
+            # 3. Process Tool Calls
             function_calls_found = []
             seen_calls = set()
 
@@ -406,29 +398,35 @@ def process_message(user_input, chat_history):
                         }
                     })
                 
+                # 4. Send Results (Retry on 504/Timeout errors specifically here)
                 try:
+                    time.sleep(1) # Extra pause before summary
                     final_response = chat.send_message(function_responses)
                     text = final_response.text
                     if not text or len(text.strip()) < 2:
                         return f"✅ Actions completed:\n" + "\n".join(all_results_text)
                     return text
+                except (DeadlineExceeded, ServiceUnavailable):
+                     # If summary fails, just return the raw results. Don't crash.
+                    return f"✅ Actions completed (Summary Unavailable due to Timeout):\n" + "\n".join(all_results_text)
                 except Exception:
-                    return f"✅ Actions completed (Summary Unavailable):\n" + "\n".join(all_results_text)
+                    return f"✅ Actions completed:\n" + "\n".join(all_results_text)
 
             else:
                 return response.text
 
-        except ResourceExhausted:
-            print("⚠️ API Quota Exceeded!")
+        # 5. Handle Specific Rate Limit / Timeout Errors
+        except (ResourceExhausted, DeadlineExceeded, ServiceUnavailable):
+            print(f"⚠️ API Limit/Timeout. Switching Key or Retrying... (Attempt {attempts+1})")
             if switch_api_key():
                 attempts += 1
-                time.sleep(1)
+                time.sleep(2) # Longer wait on retry
                 continue
             else:
-                return "⚠️ Error: All API keys have exhausted their quota."
+                return "⚠️ Error: System is busy or quota exceeded. Please wait 1 minute."
         
         except Exception as e:
             traceback.print_exc()
             return f"⚠️ System Error: {str(e)}"
     
-    return "⚠️ Error: Request failed."
+    return "⚠️ Error: Request failed after multiple attempts."
