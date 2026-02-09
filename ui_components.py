@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v12.0 UI (The Infinite Chase).
+    Renders the N.A.O.M.I v12.0 UI (Infinite Pursuit).
     """
     
     # --- COLOR PALETTE ---
@@ -58,12 +58,12 @@ def render_jarvis_ui(state="idle"):
             animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 0. BACKGROUND TRACER --- */
+        /* --- 0. BACKGROUND TRACER (SIMPLE) --- */
         .svg-bg-tracer {{
             position: absolute;
             width: 480px; height: 480px;
             z-index: 0;
-            animation: spin-slow 60s linear infinite;
+            animation: spin-slow 30s linear infinite;
         }}
         .tracer-path-bg {{
             fill: none;
@@ -75,46 +75,48 @@ def render_jarvis_ui(state="idle"):
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- 1. THE INFINITE JAGGED TRACER --- */
+        /* --- 1. THE JAGGED TRACER (INFINITE PURSUIT) --- */
         .svg-complex-tracer {{
             position: absolute;
             width: 380px; height: 380px;
             z-index: 5;
-            /* Rotate the whole shape slowly against the grain */
-            animation: spin-slow 45s linear infinite reverse;
+            /* Rotate the container slowly to add chaos to the chase */
+            animation: spin-slow 20s linear infinite;
         }}
 
-        /* PATH LOGIC: Total Length approx 1300 */
+        /* PATH GEOMETRY NOTE:
+           The total length of this jagged path is approx 1500 units.
+           To make them loop infinitely without fading, we use stroke-dashoffset
+           scrolling from 0 to -1500.
+        */
 
-        /* Trace 1: White Leader */
+        /* Trace 1: White Leader (Fast & Short) */
         .trace-white {{
             fill: none;
             stroke: #ffffff;
-            stroke-width: 1.5;
+            stroke-width: 2;
             stroke-linecap: round;
-            /* Dash: 400px Line, 900px Gap (Total 1300) */
-            stroke-dasharray: 400 900; 
             
-            /* Animate the offset endlessly */
-            animation: trace-infinite 3s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+            /* Dash: 150px solid, 1350px gap */
+            stroke-dasharray: 150 1500; 
+            
+            /* 3s Duration (Faster than color) */
+            animation: trace-infinite 3s linear infinite;
         }}
 
-        /* Trace 2: Color Chaser */
+        /* Trace 2: Color Follower (Heavy & Dragging) */
         .trace-color {{
             fill: none;
             stroke: {c};
-            stroke-width: 5;
+            stroke-width: 6;
             stroke-linecap: square;
-            filter: drop-shadow(0 0 8px {c});
-            /* Dash: 150px Line, 1150px Gap (Total 1300) */
-            stroke-dasharray: 150 1150;
+            filter: drop-shadow(0 0 10px {c});
             
-            /* Use the same animation but start 'behind' visually by adding to the offset in the dasharray definition? 
-               No, we use a slight delay or just the dasharray gap to position it.
-               Here we use the same animation keyframe so they move at the same speed, 
-               but the dash pattern puts the color block behind the white block.
-            */
-            animation: trace-infinite 3s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+            /* Dash: 500px solid, 1000px gap */
+            stroke-dasharray: 500 1500;
+            
+            /* 3.2s Duration (Slightly slower - causes "lapping" effect) */
+            animation: trace-infinite 3.2s linear infinite;
         }}
 
         /* --- 2. RINGS & ELEMENTS --- */
@@ -181,18 +183,16 @@ def render_jarvis_ui(state="idle"):
             100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
         }}
 
-        /* INFINITE TRACE
-           The dashes travel exactly one full loop length (1300) 
-           so the loop is seamless. 
-           Start: Offset 1300 (Hidden/Start) -> End: Offset 0 (Wrapped)
-           Wait, to move FORWARD, offset goes Down. 
-           Offset 1300 -> 0.
+        /* INFINITE TRACE:
+           Moves from 0 offset to -1500 (Total Length).
+           Since dasharray includes a 1500 gap, this loops seamlessly.
         */
-        @keyframes trace-infinite {
-            0% { stroke-dashoffset: 1300; }
-            100% { stroke-dashoffset: 0; }
-        }
+        @keyframes trace-infinite {{
+            0% {{ stroke-dashoffset: 1500; }}
+            100% {{ stroke-dashoffset: 0; }}
+        }}
 
+        /* MORPH LOGIC: SHARPER SHURIKEN */
         @keyframes morph-north {{
             0%, 100% {{ transform: translate(-50%, -200px); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
             50% {{ transform: translate(-50%, -260px); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
