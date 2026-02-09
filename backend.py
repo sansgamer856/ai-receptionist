@@ -3,7 +3,7 @@ import datetime
 import traceback
 import smtplib
 import time
-import json 
+import json
 import pytz 
 from email.mime.text import MIMEText
 
@@ -95,7 +95,7 @@ def get_current_time():
     tz = pytz.timezone(TIMEZONE)
     return datetime.datetime.now(tz).strftime("%A, %B %d, %Y at %I:%M %p %Z")
 
-def get_date_range(date_str):
+def get_date_range(date_str, days=1):
     tz = pytz.timezone(TIMEZONE)
     now = datetime.datetime.now(tz)
     
@@ -110,7 +110,7 @@ def get_date_range(date_str):
         except:
             return None, None
 
-    end_dt = start_dt + datetime.timedelta(days=1)
+    end_dt = start_dt + datetime.timedelta(days=days)
     return start_dt.isoformat(), end_dt.isoformat()
 
 def format_event_time(iso_str):
@@ -188,12 +188,76 @@ def add_to_schedule(summary: str, date_time: str, item_type: str, category: str,
         formatted_date = start_time.strftime("%m/%d/%Y %H:%M")
         
         values = [[formatted_date, summary, item_type, category, notes, False]]
-        
         sheets_service.spreadsheets().values().append(
             spreadsheetId=SPREADSHEET_ID, range=SHEET_RANGE, valueInputOption="USER_ENTERED", body={'values': values}
         ).execute()
         return f"Success: Added '{summary}' ({item_type}/{category}) to schedule."
     except Exception as e: return f"Error adding task: {str(e)}"
+
+def update_event(keyword: str, date_str: str = "today", new_start_time: str = None, new_title: str = None):
+    """
+    Updates an event matching the keyword and date.
+    new_start_time: ISO format string for the new time.
+    new_title: String for the new title.
+    """
+    try:
+        # 1. Find the event first
+        start_iso, end_iso = get_date_range(date_str, days=2) # Search 48h window to be safe
+        if not start_iso: return "Error: Invalid date."
+
+        print(f"🔄 Updating '{keyword}' around {date_str}...")
+
+        events_result = calendar_service.events().list(
+            calendarId=CALENDAR_ID, 
+            timeMin=start_iso, 
+            timeMax=end_iso, 
+            q=keyword, # Search by text
+            singleEvents=True
+        ).execute()
+
+        events = events_result.get('items', [])
+        if not events: return f"Could not find any event matching '{keyword}' on {date_str} to update."
+
+        # Pick the first match
+        target_event = events[0]
+        event_id = target_event['id']
+        current_summary = target_event.get('summary', 'No Title')
+        
+        # 2. Prepare Updates
+        changes = {}
+        updated_fields = []
+
+        if new_title:
+            changes['summary'] = new_title
+            updated_fields.append(f"Title -> {new_title}")
+
+        if new_start_time:
+            # Parse new time
+            try: start_dt = datetime.datetime.fromisoformat(new_start_time)
+            except: start_dt = datetime.datetime.strptime(new_start_time, "%Y-%m-%dT%H:%M:%S")
+            
+            if start_dt.tzinfo is None:
+                tz = pytz.timezone(TIMEZONE)
+                start_dt = tz.localize(start_dt)
+            
+            # Assume 1 hour duration if not specified, or keep existing duration if possible
+            # For simplicity, we default to +1h or keep it if we read the old one (complex).
+            # Let's just set +1h for V1 reliability.
+            end_dt = start_dt + datetime.timedelta(hours=1)
+            
+            changes['start'] = {'dateTime': start_dt.isoformat(), 'timeZone': TIMEZONE}
+            changes['end'] = {'dateTime': end_dt.isoformat(), 'timeZone': TIMEZONE}
+            updated_fields.append(f"Time -> {format_event_time(start_dt.isoformat())}")
+
+        if not changes:
+            return "Found the event, but no changes (time or title) were requested."
+
+        # 3. Execute Patch
+        calendar_service.events().patch(calendarId=CALENDAR_ID, eventId=event_id, body=changes).execute()
+
+        return f"Success: Updated '{current_summary}'. Changes: {', '.join(updated_fields)}"
+
+    except Exception as e: return f"Error updating event: {str(e)}"
 
 def delete_events(date_str: str = "today", keyword: str = ""):
     try:
@@ -239,28 +303,28 @@ def send_notification(message: str):
         return "Notification sent."
     except Exception as e: return f"Email failed: {e}"
 
-tools = [add_to_schedule, check_schedule, list_upcoming_events, delete_events, send_notification]
+# --- REGISTER TOOLS ---
+tools = [add_to_schedule, check_schedule, list_upcoming_events, update_event, delete_events, send_notification]
 tool_map = {
     'add_to_schedule': add_to_schedule,
     'check_schedule': check_schedule,
     'list_upcoming_events': list_upcoming_events, 
+    'update_event': update_event, # NEW TOOL
     'delete_events': delete_events,
     'send_notification': send_notification
 }
 
-# --- AI BRAIN (Fixed Duplicate Logic) ---
+# --- AI BRAIN ---
 def process_message(user_input, chat_history):
     max_retries = len(api_keys) + 1 
     attempts = 0
 
     system_instruction = f"""
     You are a smart receptionist.
-    1. When adding tasks, you MUST classify them using EXACTLY these values:
+    1. When adding tasks, classify using:
        - Types: {', '.join(VALID_TYPES)}
        - Categories: {', '.join(VALID_CATEGORIES)}
-       - If the category is unclear, use 'General'.
-       - If the type is unclear, use 'To-Do Item'.
-    2. When listing events, use a clean bulleted format.
+    2. To UPDATE or EDIT an event, use the 'update_event' tool.
     3. You can process multiple requests at once.
     """
 
@@ -272,24 +336,20 @@ def process_message(user_input, chat_history):
             date_context = f" [System Info: Current NY Time is {get_current_time()}]"
             augmented_input = user_input + date_context
             
-            # 1. Attempt to get the initial intent
             response = chat.send_message(augmented_input)
             
-            # 2. Extract Function Calls
+            # Extract Function Calls
             function_calls_found = []
-            seen_calls = set() # Deduplication set
+            seen_calls = set() 
 
             for part in response.parts:
                 if part.function_call:
-                    # Create a signature to check for duplicates (name + sorted args)
                     fc = part.function_call
                     signature = (fc.name, json.dumps(dict(fc.args), sort_keys=True))
-                    
                     if signature not in seen_calls:
                         function_calls_found.append(fc)
                         seen_calls.add(signature)
             
-            # 3. If tools found, execute them
             if function_calls_found:
                 function_responses = []
                 all_results_text = []
@@ -314,7 +374,6 @@ def process_message(user_input, chat_history):
                         }
                     })
                 
-                # 4. CRITICAL FIX: Try to get the summary, but do NOT retry the whole loop if this fails.
                 try:
                     final_response = chat.send_message(function_responses)
                     text = final_response.text
@@ -322,8 +381,7 @@ def process_message(user_input, chat_history):
                         return f"✅ Actions completed:\n" + "\n".join(all_results_text)
                     return text
                 except Exception as inner_e:
-                    print(f"⚠️ Summary generation failed, but tools executed. Returning raw result. Error: {inner_e}")
-                    return f"✅ Actions completed successfully (Summary Unavailable):\n" + "\n".join(all_results_text)
+                    return f"✅ Actions completed successfully:\n" + "\n".join(all_results_text)
 
             else:
                 return response.text
@@ -339,9 +397,7 @@ def process_message(user_input, chat_history):
         
         except Exception as e:
             traceback.print_exc()
-            # Only retry if we haven't executed tools yet (which is handled inside the try block now)
             attempts += 1
-            print(f"⚠️ System Error (Retry {attempts}): {str(e)}")
             time.sleep(1)
     
     return "⚠️ Error: Request failed."
