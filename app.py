@@ -1,7 +1,8 @@
 import streamlit as st
 import time
 from ui_components import render_jarvis_ui
-import voice_engine  # Import our new engine
+import voice_engine  
+import backend  # <--- The Brain (Gemini + Tools)
 
 # --- PAGE CONFIG ---
 st.set_page_config(layout="wide", page_title="N.A.O.M.I. Core")
@@ -13,10 +14,10 @@ if "messages" not in st.session_state:
 # --- MAIN PROCESSOR ---
 def run_interaction_sequence(user_text=None, ui_placeholder=None):
     """
-    The Master Loop: Controls UI states and Voice Logic.
+    The Master Loop: Listen -> Think (Backend) -> Speak
     """
     
-    # 1. GET INPUT (If voice was clicked, we listen now)
+    # 1. GET INPUT
     final_input = user_text
     
     if final_input is None:
@@ -24,7 +25,6 @@ def run_interaction_sequence(user_text=None, ui_placeholder=None):
         with ui_placeholder:
             render_jarvis_ui("listening")
         
-        # Real Microphone Activation
         detected_text = voice_engine.listen_to_microphone()
         
         if detected_text:
@@ -39,22 +39,25 @@ def run_interaction_sequence(user_text=None, ui_placeholder=None):
     st.session_state.messages.append({"role": "user", "content": final_input})
     
     # 2. STATE: THINKING
+    # This is where the magic happens. We call the backend.
     with ui_placeholder:
         render_jarvis_ui("thinking")
     
-    # --- [INSERT YOUR LLM / BRAIN HERE] ---
-    # For now, we simulate a brain.
-    # In the future, replace this with: response = openai_client.chat(...)
-    time.sleep(1.5) # Fake thinking time
+    try:
+        # Call Gemini (with Calendar tools enabled)
+        # We pass the full chat history so it remembers context
+        ai_response = backend.process_message(final_input, st.session_state.messages)
+    except Exception as e:
+        ai_response = f"I encountered a critical error in my neural net: {e}"
     
-    ai_response = f"I heard you say: {final_input}. My systems are operating at 100% efficiency."
+    # Add AI response to history
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
 
     # 3. STATE: SPEAKING
     with ui_placeholder:
         render_jarvis_ui("speaking")
         
-    # Real Voice Activation (Blocking call - UI stays "Speaking" while audio plays)
+    # Real Voice Activation (Blocks UI while speaking)
     voice_engine.speak_text(ai_response)
     
     # 4. STATE: IDLE
@@ -74,7 +77,7 @@ col1, col2, col3 = st.columns([1, 2, 1])
 
 with col2:
     with st.form("interaction_form"):
-        text_input = st.text_input("Command Input")
+        text_input = st.text_input("Command Input", placeholder="Ask about your schedule...")
         
         c1, c2 = st.columns(2)
         with c1:
@@ -94,4 +97,6 @@ if listen_click:
 # --- LOGS ---
 with st.expander("System Logs"):
     for msg in st.session_state.messages:
-        st.write(f"**{msg['role'].upper()}:** {msg['content']}")
+        role = msg['role'].upper()
+        content = msg['content']
+        st.write(f"**{role}:** {content}")

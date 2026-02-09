@@ -32,10 +32,10 @@ def listen_to_microphone():
             return "API Error"
 
 # --- 2. THE MOUTH (Text to Speech) ---
-async def generate_audio_file(text, voice="en-US-AriaNeural"):
+
+async def generate_audio_file(text, voice="en-GB-RyanNeural"): # <--- CHANGED HERE
     """
     Generates an MP3 file using Microsoft Edge's Free Neural TTS.
-    Voices: 'en-US-AriaNeural', 'en-US-GuyNeural', 'en-GB-SoniaNeural', etc.
     """
     communicate = edge_tts.Communicate(text, voice)
     await communicate.save("response.mp3")
