@@ -3,12 +3,12 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v10.0 UI (Shuriken & Dual Tracer).
+    Renders the N.A.O.M.I v11.0 UI (Synched Jagged Tracer).
     """
     
     # --- COLOR PALETTE ---
     colors = {
-        "idle": "#00f3ff",     # Cyan
+        "idle": "#00f3ff",      # Cyan
         "listening": "#d600ff", # Neon Purple
         "thinking": "#ffaa00",  # Amber/Gold
         "speaking": "#ffffff"   # White
@@ -43,11 +43,11 @@ def render_jarvis_ui(state="idle"):
             align-items: center;
         }}
 
-        /* --- TITLE (SLIGHTLY LARGER) --- */
+        /* --- TITLE --- */
         .core-text {{
             position: absolute;
             z-index: 20;
-            font-size: 26px; /* Increased from 20px */
+            font-size: 26px;
             font-weight: 900;
             letter-spacing: 6px;
             background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
@@ -58,7 +58,7 @@ def render_jarvis_ui(state="idle"):
             animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 0. BACKGROUND TRACER (SIMPLE CIRCLE) --- */
+        /* --- 0. BACKGROUND TRACER (SIMPLE) --- */
         .svg-bg-tracer {{
             position: absolute;
             width: 480px; height: 480px;
@@ -75,44 +75,61 @@ def render_jarvis_ui(state="idle"):
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- NEW: THE COMPLEX DOUBLE TRACER (BETWEEN RINGS) --- */
+        /* --- 1. THE JAGGED TRACER (BETWEEN RINGS) --- */
         .svg-complex-tracer {{
             position: absolute;
-            width: 380px; height: 380px; /* Sits between Scale and Outer */
+            width: 380px; height: 380px;
             z-index: 5;
-            /* No rotation on the container, the paths draw the shape */
+            /* Rotate the whole shape slowly so it's not static */
+            animation: spin-slow 45s linear infinite;
         }}
 
-        /* The Geometry: A Tech Octagon */
-        /* d="M 190,40 L 240,40 L 260,90 L 320,90 L 340,140 ... " (Simplified below) */
-        
-        /* Trace 1: Thin White Leader */
+        /* PATH GEOMETRY: 
+           A circle approx r=190, but with jagged steps.
+           Total length is approx 1300 units.
+        */
+
+        /* Trace 1: White Leader (Thin) */
         .trace-white {{
             fill: none;
             stroke: #ffffff;
-            stroke-width: 1;
+            stroke-width: 1.5;
             stroke-linecap: round;
-            stroke-dasharray: 1200; /* Approx length of shape */
-            stroke-dashoffset: 1200;
-            animation: draw-complex 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+            
+            /* The Dash: 
+               Gap must be larger than total length (1300) to hide it. 
+               Dash is short (100) just to act as the "head".
+            */
+            stroke-dasharray: 600 2000; 
+            
+            /* Start "Before" the line (positive offset pushes it back) */
+            animation: trace-jagged 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }}
 
-        /* Trace 2: Thick Color Laggard */
+        /* Trace 2: Color Follower (Thick) */
         .trace-color {{
             fill: none;
             stroke: {c};
-            stroke-width: 4; /* Thicker */
+            stroke-width: 5;
             stroke-linecap: square;
-            /* Short segment (Comet) */
-            stroke-dasharray: 200 1200; 
-            stroke-dashoffset: 1200;
-            filter: drop-shadow(0 0 5px {c});
-            /* Same animation, but slight delay/offset visually handled by dasharray */
-            animation: draw-complex 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-            animation-delay: 0.1s; /* Slight lag */
+            filter: drop-shadow(0 0 8px {c});
+            
+            /* The Dash:
+               A shorter segment (300) following the white one.
+            */
+            stroke-dasharray: 300 2000;
+            
+            /* Same animation timing, but we adjust the dashoffset in the keyframe
+               or start with a different initial offset? 
+               actually, if we use the same keyframe, we just need to delay the phase 
+               visually by offsetting the dasharray pattern. 
+               
+               BETTER: Use the EXACT same animation, but add a 'lag' via calculation.
+            */
+            animation: trace-jagged-lag 4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }}
 
-        /* --- 1. THE SPLIT-ARC RING --- */
+        /* --- 2. RINGS & ELEMENTS --- */
         .ring-arc {{
             position: absolute;
             width: 240px; height: 240px;
@@ -124,7 +141,6 @@ def render_jarvis_ui(state="idle"):
             animation: spin-smooth 20s linear infinite;
         }}
 
-        /* --- 2. THE RULER SCALE --- */
         .ring-scale {{
             position: absolute;
             width: 320px; height: 320px;
@@ -136,7 +152,6 @@ def render_jarvis_ui(state="idle"):
             animation: spin-reverse 40s linear infinite;
         }}
 
-        /* --- 3. MORPHING SHURIKENS (Updated Shape) --- */
         .ring-cardinal {{
             position: absolute;
             width: 100%; height: 100%;
@@ -148,19 +163,15 @@ def render_jarvis_ui(state="idle"):
             left: 50%; top: 50%;
             width: 40px; height: 40px;
             background: {c};
-            
-            /* Start: Standard Triangle */
             clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%);
             transform-origin: center center;
             box-shadow: 0 0 15px {c};
         }}
-
         .north {{ animation: morph-north 6s ease-in-out infinite; }}
         .south {{ animation: morph-south 6s ease-in-out infinite; }}
         .east  {{ animation: morph-east  6s ease-in-out infinite; }}
         .west  {{ animation: morph-west  6s ease-in-out infinite; }}
 
-        /* --- 4. OUTER DASHED --- */
         .ring-dashed {{
             position: absolute;
             width: 440px; height: 440px;
@@ -176,26 +187,33 @@ def render_jarvis_ui(state="idle"):
         @keyframes spin-reverse {{ 100% {{ transform: rotate(-360deg); }} }}
         @keyframes text-shimmer {{ 0% {{ background-position: 200% center; }} 100% {{ background-position: -200% center; }} }}
 
-        /* Simple Circle Trace */
         @keyframes trace-circle {{
             0% {{ stroke-dasharray: 0 1445; stroke-dashoffset: 0; }}
             50% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: 0; }}
             100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
         }}
 
-        /* Complex Shape Trace (Draws and then fades/moves) */
-        @keyframes draw-complex {{
-            0% {{ stroke-dashoffset: 1200; }} /* Hidden */
-            40% {{ stroke-dashoffset: 0; }}    /* Fully Drawn */
-            60% {{ stroke-dashoffset: 0; opacity: 1; }} /* Pause */
-            100% {{ stroke-dashoffset: -1200; opacity: 0; }} /* Disappear/Travel off */
-        }}
-
-        /* MORPH LOGIC: SHARPER SHURIKEN */
-        /* Triangle: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%)
-           Shuriken (3-Point Spike): polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%)
-           This creates a "Star Trek Badge" / Stealth Fighter shape.
+        /* TRACE ANIMATION (JAGGED)
+           Total path length approx 1300.
+           We move the dashoffset from Positive (hidden start) to Negative (hidden end).
         */
+        @keyframes trace-jagged {{
+            0% {{ stroke-dashoffset: 1300; opacity: 1; }}
+            40% {{ stroke-dashoffset: 0; opacity: 1; }} 
+            60% {{ stroke-dashoffset: -1300; opacity: 1; }}
+            100% {{ stroke-dashoffset: -1300; opacity: 0; }}
+        }}
+        
+        /* The Lagging line needs to start slightly later in the physical space.
+           By adding to the offset start/end points, we shift it spatially behind.
+        */
+        @keyframes trace-jagged-lag {{
+            0% {{ stroke-dashoffset: 1450; opacity: 0; }} /* Starts further back */
+            10% {{ opacity: 1; }}
+            40% {{ stroke-dashoffset: 150; }} /* Arrives at '0' later */
+            60% {{ stroke-dashoffset: -1150; opacity: 1; }}
+            100% {{ stroke-dashoffset: -1150; opacity: 0; }}
+        }}
 
         @keyframes morph-north {{
             0%, 100% {{ transform: translate(-50%, -200px); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
@@ -228,10 +246,29 @@ def render_jarvis_ui(state="idle"):
 
             <svg class="svg-complex-tracer" viewBox="0 0 400 400">
                 <defs>
-                    <path id="complexShape" d="M 200,10 L 330,60 L 390,190 L 330,320 L 200,390 L 70,320 L 10,190 L 70,60 Z" />
+                   <path id="jaggedShape" d="
+                     M 200,10 
+                     A 190,190 0 0 1 300,40
+                     L 280,60 L 320,80
+                     A 190,190 0 0 1 380,150
+                     L 350,150 L 390,190
+                     A 190,190 0 0 1 380,260
+                     L 360,250 L 340,290
+                     A 190,190 0 0 1 200,390
+                     L 200,360 L 180,390
+                     A 190,190 0 0 1 50,300
+                     L 80,280 L 40,240
+                     A 190,190 0 0 1 10,180
+                     L 40,180 L 20,130
+                     A 190,190 0 0 1 100,40
+                     L 110,70 L 140,20
+                     Z
+                   " />
                 </defs>
-                <use href="#complexShape" class="trace-white" />
-                <use href="#complexShape" class="trace-color" />
+                
+                <use href="#jaggedShape" class="trace-white" />
+                
+                <use href="#jaggedShape" class="trace-color" />
             </svg>
 
             <div class="ring-dashed"></div>
@@ -244,9 +281,7 @@ def render_jarvis_ui(state="idle"):
             </div>
 
             <div class="ring-scale"></div>
-
             <div class="ring-arc"></div>
-
             <div class="core-text">N.A.O.M.I.</div>
         </div>
     </body>
