@@ -1,273 +1,212 @@
-import sys
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QProgressBar, QGridLayout
-)
-from PyQt5.QtCore import Qt, QRectF, QTimer
-from PyQt5.QtGui import (
-    QColor, QPainter, QPen, QFont, QBrush, QLinearGradient, QPalette
-)
-from PyQt5.QtWidgets import QGraphicsDropShadowEffect
+import streamlit as st
+import streamlit.components.v1 as components
 
-# --- Constants for Styling ---
-BG_COLOR = QColor("#0a0b10") # Dark background
-PANEL_BG = QColor("#141622") # Slightly lighter panel background
-ACCENT_COLOR = QColor("#00eaff") # Bright cyan/blue
-ACCENT_GLOW = QColor("#00eaff40") # Faint glow of the accent
-TEXT_COLOR = QColor("#ffffff")
-FONT_FAMILY = "Orbitron" # A futuristic-looking font (you might need to install it)
-FONT_SIZE_TITLE = 16
-FONT_SIZE_VALUE = 28
-FONT_SIZE_LABEL = 10
-
-# --- Helper Functions ---
-def get_glow_effect(color=ACCENT_COLOR, blur_radius=20, offset=0):
-    """Creates a drop shadow effect to simulate a glow."""
-    effect = QGraphicsDropShadowEffect()
-    effect.setBlurRadius(blur_radius)
-    effect.setColor(color)
-    effect.setOffset(offset)
-    return effect
-
-# --- Custom UI Components ---
-
-class GlowingPanel(QWidget):
-    """A square/rectangular panel with a glowing border and title."""
-    def __init__(self, title="PANEL"):
-        super().__init__()
-        self.layout = QVBoxLayout()
-        self.setLayout(self.layout)
-        
-        # Title Label
-        self.title_label = QLabel(title)
-        self.title_label.setFont(QFont(FONT_FAMILY, FONT_SIZE_LABEL, QFont.Bold))
-        self.title_label.setStyleSheet(f"color: {ACCENT_COLOR.name()};")
-        self.title_label.setAlignment(Qt.AlignLeft)
-        self.layout.addWidget(self.title_label)
-        
-        # Content placeholder (will be filled by subclasses or addWidget)
-        self.content_layout = QVBoxLayout()
-        self.layout.addLayout(self.content_layout)
-
-        # Apply styles for the panel background and border
-        self.setStyleSheet(f"""
-            GlowingPanel {{
-                background-color: {PANEL_BG.name()};
-                border: 1px solid {ACCENT_COLOR.name()};
-                border-radius: 8px;
-            }}
-        """)
-        
-        # Add a glow effect to the entire panel
-        self.setGraphicsEffect(get_glow_effect(blur_radius=25))
-
-    def add_widget(self, widget):
-        """Adds a widget to the panel's content area."""
-        self.content_layout.addWidget(widget)
-
-class CircularGauge(QWidget):
-    """A circular gauge to display a percentage value."""
-    def __init__(self, title="GAUGE", value=0):
-        super().__init__()
-        self.title = title
-        self.value = value
-        self.setMinimumSize(150, 150)
-
-    def set_value(self, value):
-        self.value = max(0, min(100, value))
-        self.update()
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
-
-        # --- Define Geometry ---
-        rect = self.rect()
-        center = rect.center()
-        size = min(rect.width(), rect.height())
-        outer_radius = (size / 2) - 10
-        inner_radius = outer_radius - 15
-        
-        # --- Draw Outer Ring (Track) ---
-        pen = QPen(QColor("#2a2d3d"), 8)
-        pen.setCapStyle(Qt.RoundCap)
-        painter.setPen(pen)
-        painter.drawEllipse(center, outer_radius, outer_radius)
-
-        # --- Draw Progress Arc ---
-        pen.setColor(ACCENT_COLOR)
-        painter.setPen(pen)
-        
-        # Calculate angles
-        start_angle = -90 * 16 # Start from top
-        span_angle = -int((self.value / 100) * 360 * 16)
-
-        arc_rect = QRectF(center.x() - outer_radius, center.y() - outer_radius, 
-                          outer_radius * 2, outer_radius * 2)
-        painter.drawArc(arc_rect, start_angle, span_angle)
-
-        # --- Draw Central Text (Value) ---
-        painter.setPen(TEXT_COLOR)
-        painter.setFont(QFont(FONT_FAMILY, FONT_SIZE_VALUE, QFont.Bold))
-        painter.drawText(rect, Qt.AlignCenter, f"{self.value}%")
-        
-        # --- Draw Title Text ---
-        painter.setPen(ACCENT_COLOR)
-        painter.setFont(QFont(FONT_FAMILY, FONT_SIZE_LABEL))
-        title_rect = QRectF(rect.left(), rect.bottom() - 30, rect.width(), 30)
-        painter.drawText(title_rect, Qt.AlignCenter, self.title)
-
-class FuturisticProgressBar(QProgressBar):
-    """A progress bar with a glowing, segmented look."""
-    def __init__(self):
-        super().__init__()
-        self.setTextVisible(False)
-        self.setFixedHeight(12)
-        
-        # Apply custom styling with QSS
-        self.setStyleSheet(f"""
-            QProgressBar {{
-                background-color: {PANEL_BG.name()};
-                border: 1px solid {ACCENT_COLOR.name()};
-                border-radius: 6px;
-            }}
-            QProgressBar::chunk {{
-                background-color: {ACCENT_COLOR.name()};
-                border-radius: 4px;
-                /* A small gradient for a more metallic/glowing look */
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                                            stop:0 {ACCENT_COLOR.name()},
-                                            stop:1 #80faff);
-            }}
-        """)
-        # Add a subtle glow to the progress chunk itself
-        self.setGraphicsEffect(get_glow_effect(blur_radius=10))
-
-class DataLabel(QWidget):
-    """A simple widget for a label-value pair."""
-    def __init__(self, label_text, value_text):
-        super().__init__()
-        layout = QHBoxLayout()
-        self.setLayout(layout)
-        layout.setContentsMargins(0, 5, 0, 5)
-        
-        lbl = QLabel(label_text)
-        lbl.setFont(QFont(FONT_FAMILY, FONT_SIZE_LABEL))
-        lbl.setStyleSheet(f"color: {ACCENT_COLOR.name()};")
-        layout.addWidget(lbl)
-        
-        val = QLabel(value_text)
-        val.setFont(QFont(FONT_FAMILY, FONT_SIZE_LABEL + 2, QFont.Bold))
-        val.setStyleSheet(f"color: {TEXT_COLOR.name()};")
-        val.setAlignment(Qt.AlignRight)
-        layout.addWidget(val)
-
-# --- Main Application Window ---
-class DashboardWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Futuristic Dashboard UI")
-        self.setMinimumSize(900, 600)
-        
-        # Set main window background
-        palette = self.palette()
-        palette.setColor(QPalette.Window, BG_COLOR)
-        self.setPalette(palette)
-
-        # Central Widget & Main Layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QGridLayout()
-        central_widget.setLayout(main_layout)
-        main_layout.setSpacing(20)
-        main_layout.setContentsMargins(30, 30, 30, 30)
-        
-        # --- Build the UI Layout ---
-        
-        # Panel 1: Main System Status (Top Left)
-        panel1 = GlowingPanel("MAIN SYSTEM STATUS")
-        
-        # Add a Circular Gauge
-        self.sys_gauge = CircularGauge("SYSTEM LOAD", 47)
-        panel1.add_widget(self.sys_gauge)
-        
-        # Add some data labels
-        panel1.add_widget(DataLabel("CPU TEMP:", "65°C"))
-        panel1.add_widget(DataLabel("MEMORY USAGE:", "8.2 GB"))
-        
-        main_layout.addWidget(panel1, 0, 0)
-
-        # Panel 2: Power & Energy (Top Right)
-        panel2 = GlowingPanel("POWER & ENERGY")
-        
-        # Add Progress Bars
-        lbl_p1 = QLabel("REACTOR CORE 1")
-        lbl_p1.setStyleSheet(f"color: {TEXT_COLOR.name()}; font-family: {FONT_FAMILY};")
-        panel2.add_widget(lbl_p1)
-        self.prog_bar1 = FuturisticProgressBar()
-        self.prog_bar1.setValue(78)
-        panel2.add_widget(self.prog_bar1)
-        
-        lbl_p2 = QLabel("CAPACITOR BANK")
-        lbl_p2.setStyleSheet(f"color: {TEXT_COLOR.name()}; font-family: {FONT_FAMILY}; font-size: {FONT_SIZE_LABEL}px;")
-        panel2.add_widget(lbl_p2)
-        self.prog_bar2 = FuturisticProgressBar()
-        self.prog_bar2.setValue(52)
-        panel2.add_widget(self.prog_bar2)
-        
-        main_layout.addWidget(panel2, 0, 1)
-        
-        # Panel 3: Navigation & Diagnostics (Bottom - spanning both columns)
-        panel3 = GlowingPanel("NAVIGATION & DIAGNOSTICS")
-        
-        # A horizontal layout inside this panel
-        h_layout = QHBoxLayout()
-        
-        # Fake Radar/Map Area
-        radar_widget = QLabel("RADAR / MAP DISPLAY")
-        radar_widget.setAlignment(Qt.AlignCenter)
-        radar_widget.setStyleSheet(f"""
-            background-color: {PANEL_BG.darker(120).name()}; 
-            color: {ACCENT_COLOR.name()};
-            border: 1px dashed {ACCENT_COLOR.name()};
-            border-radius: 50%;
-        """)
-        radar_widget.setMinimumSize(200, 200)
-        h_layout.addWidget(radar_widget)
-        
-        # Diagnostic Data List
-        v_layout = QVBoxLayout()
-        v_layout.addWidget(DataLabel("LATITUDE:", "34.0522° N"))
-        v_layout.addWidget(DataLabel("LONGITUDE:", "118.2437° W"))
-        v_layout.addWidget(DataLabel("ALTITUDE:", "12,500 ft"))
-        v_layout.addWidget(DataLabel("VELOCITY:", "450 kts"))
-        
-        h_layout.addLayout(v_layout)
-        panel3.add_widget(QWidget()) # Spacer
-        panel3.content_layout.addLayout(h_layout)
-        
-        main_layout.addWidget(panel3, 1, 0, 1, 2) # Span 1 row, 2 columns
-
-        # --- Simple Timer to simulate data changes ---
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_data)
-        self.timer.start(2000) # Update every 2 seconds
-
-    def update_data(self):
-        """Simulates changing data for a live-feeling demo."""
-        import random
-        new_load = self.sys_gauge.value + random.randint(-5, 5)
-        self.sys_gauge.set_value(new_load)
-        
-        new_prog1 = self.prog_bar1.value() + random.randint(-3, 3)
-        self.prog_bar1.setValue(max(0, min(100, new_prog1)))
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
+def render_jarvis_ui(state="idle"):
+    """
+    Renders the ADVANCED N.A.O.M.I DASHBOARD.
+    """
     
-    # Optional: Load a futuristic font
-    # QFontDatabase.addApplicationFont("path/to/Orbitron.ttf")
+    # --- COLOR PALETTE (Cyberpunk HUD) ---
+    colors = {
+        "idle": {"core": "#00f3ff", "glow": "rgba(0, 243, 255, 0.5)", "alert": "#00f3ff"},
+        "listening": {"core": "#bf00ff", "glow": "rgba(191, 0, 255, 0.6)", "alert": "#ff0080"},
+        "thinking": {"core": "#ffcc00", "glow": "rgba(255, 204, 0, 0.6)", "alert": "#ffaa00"},
+        "speaking": {"core": "#ffffff", "glow": "rgba(255, 255, 255, 0.8)", "alert": "#00f3ff"}
+    }
+    
+    c = colors.get(state, colors["idle"])
+    
+    html_code = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap');
 
-    window = DashboardWindow()
-    window.show()
-    sys.exit(app.exec_())
+        body {{
+            background-color: transparent;
+            color: {c['core']};
+            font-family: 'Orbitron', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 600px;
+        }}
+
+        /* --- GRID LAYOUT --- */
+        .dashboard-grid {{
+            display: grid;
+            grid-template-columns: 1fr 2fr 1fr;
+            grid-template-rows: 1fr 3fr 1fr;
+            width: 100%;
+            height: 100%;
+            max-width: 900px;
+            gap: 10px;
+            padding: 20px;
+            box-sizing: border-box;
+        }}
+
+        .panel {{
+            border: 1px solid rgba(0, 243, 255, 0.1);
+            background: rgba(0, 10, 20, 0.4);
+            position: relative;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }}
+
+        .panel::before {{ /* Corner Accents */
+            content: ''; position: absolute; top: 0; left: 0; width: 10px; height: 10px;
+            border-top: 2px solid {c['core']}; border-left: 2px solid {c['core']};
+        }}
+        .panel::after {{
+            content: ''; position: absolute; bottom: 0; right: 0; width: 10px; height: 10px;
+            border-bottom: 2px solid {c['core']}; border-right: 2px solid {c['core']};
+        }}
+
+        /* --- MODULES --- */
+        .top-left {{ grid-column: 1; grid-row: 1; }}
+        .top-right {{ grid-column: 3; grid-row: 1; text-align: right; }}
+        .center-stage {{ grid-column: 2; grid-row: 1 / span 3; display: flex; justify-content: center; align-items: center; }}
+        .bottom-left {{ grid-column: 1; grid-row: 3; }}
+        .bottom-right {{ grid-column: 3; grid-row: 3; text-align: right; }}
+        .side-stats {{ grid-column: 1; grid-row: 2; display: flex; flex-direction: column; gap: 15px; justify-content: center; }}
+        .side-logs {{ grid-column: 3; grid-row: 2; font-size: 10px; opacity: 0.7; overflow: hidden; }}
+
+        /* --- TEXT STYLES --- */
+        h3 {{ margin: 0 0 5px 0; font-size: 12px; letter-spacing: 2px; opacity: 0.8; }}
+        .val {{ font-size: 18px; font-weight: bold; text-shadow: 0 0 10px {c['glow']}; }}
+        .log-line {{ border-bottom: 1px solid rgba(0,255,255,0.1); padding: 2px 0; }}
+
+        /* --- BARS --- */
+        .bar-container {{ width: 100%; height: 6px; background: rgba(255,255,255,0.1); margin-top: 5px; }}
+        .bar-fill {{ height: 100%; background: {c['core']}; width: 0%; animation: load-bar 3s infinite ease-in-out; }}
+        .bar-fill.random1 {{ width: 45%; animation-duration: 2s; }}
+        .bar-fill.random2 {{ width: 70%; animation-duration: 4s; }}
+
+        /* --- THE REACTOR (CENTER) --- */
+        .reactor {{
+            position: relative;
+            width: 300px;
+            height: 300px;
+        }}
+        
+        .ring {{
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            border-radius: 50%;
+            border: 1px solid transparent;
+        }}
+
+        .outer-ring {{
+            width: 280px; height: 280px;
+            border: 2px dashed {c['core']};
+            animation: spin 20s linear infinite;
+            opacity: 0.3;
+        }}
+
+        .mid-ring {{
+            width: 220px; height: 220px;
+            border-top: 4px solid {c['core']};
+            border-bottom: 4px solid {c['core']};
+            box-shadow: 0 0 15px {c['glow']};
+            animation: spin-reverse 8s linear infinite;
+        }}
+
+        .inner-ring {{
+            width: 140px; height: 140px;
+            border-left: 8px solid {c['alert']};
+            border-right: 2px solid {c['alert']};
+            animation: spin 3s cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
+        }}
+
+        .core-dot {{
+            width: 40px; height: 40px;
+            background: {c['core']};
+            border-radius: 50%;
+            box-shadow: 0 0 40px {c['core']};
+            animation: pulse 1s infinite alternate;
+        }}
+
+        /* --- STATE ANIMATIONS --- */
+        .listening .mid-ring {{ animation-duration: 30s; border-color: {c['core']}; }}
+        .listening .inner-ring {{ animation: breathe 2s infinite ease-in-out; border-style: dotted; }}
+        
+        .thinking .mid-ring {{ animation: spin 0.5s linear infinite; border-width: 2px; }}
+        .thinking .inner-ring {{ animation: spin-reverse 1s linear infinite; border-width: 4px; }}
+        
+        .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
+        
+        @keyframes spin {{ 100% {{ transform: translate(-50%, -50%) rotate(360deg); }} }}
+        @keyframes spin-reverse {{ 100% {{ transform: translate(-50%, -50%) rotate(-360deg); }} }}
+        @keyframes pulse {{ 0% {{ opacity: 0.5; transform: translate(-50%, -50%) scale(0.8); }} 100% {{ opacity: 1; transform: translate(-50%, -50%) scale(1.2); }} }}
+        @keyframes breathe {{ 0% {{ transform: translate(-50%, -50%) scale(1); }} 50% {{ transform: translate(-50%, -50%) scale(1.1); }} 100% {{ transform: translate(-50%, -50%) scale(1); }} }}
+        @keyframes load-bar {{ 0% {{ width: 10%; }} 50% {{ width: 80%; }} 100% {{ width: 10%; }} }}
+        @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
+
+    </style>
+    </head>
+    <body>
+        <div class="dashboard-grid {state}">
+            
+            <div class="panel top-left">
+                <h3>SYS.STATUS</h3>
+                <div class="val">ONLINE</div>
+                <div class="bar-container"><div class="bar-fill"></div></div>
+            </div>
+
+            <div class="side-stats">
+                <div>
+                    <h3>CPU LOAD</h3>
+                    <div class="bar-container"><div class="bar-fill random1"></div></div>
+                </div>
+                <div>
+                    <h3>MEMORY</h3>
+                    <div class="bar-container"><div class="bar-fill random2"></div></div>
+                </div>
+                <div>
+                    <h3>UPLINK</h3>
+                    <div class="val" style="font-size: 12px">450 Mb/s</div>
+                </div>
+            </div>
+
+            <div class="center-stage">
+                <div class="reactor">
+                    <div class="ring outer-ring"></div>
+                    <div class="ring mid-ring"></div>
+                    <div class="ring inner-ring"></div>
+                    <div class="ring core-dot"></div>
+                </div>
+            </div>
+
+            <div class="panel top-right">
+                <h3>MODE</h3>
+                <div class="val">{state.upper()}</div>
+            </div>
+
+            <div class="panel side-logs">
+                <div class="log-line">> INITIALIZING PROTOCOL...</div>
+                <div class="log-line">> CONNECTING TO G.CAL...</div>
+                <div class="log-line">> SECURE LINK ESTABLISHED</div>
+                <div class="log-line">> WAITING FOR INPUT...</div>
+            </div>
+
+            <div class="panel bottom-left">
+                <h3>COORDINATES</h3>
+                <div style="font-size: 10px">40.7128° N, 74.0060° W</div>
+            </div>
+
+            <div class="panel bottom-right">
+                <h3>N.A.O.M.I. v2.4</h3>
+            </div>
+            
+        </div>
+    </body>
+    </html>
+    """
+    
+    # We increase height to accommodate the dashboard
+    components.html(html_code, height=600)
