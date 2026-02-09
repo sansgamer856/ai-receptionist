@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v14.0 UI (The Perfect Chase).
+    Renders the N.A.O.M.I v14.0 UI (The Elastic Pursuit).
     """
     
     # --- COLOR PALETTE ---
@@ -75,23 +75,15 @@ def render_jarvis_ui(state="idle"):
             animation: trace-circle 6s ease-in-out infinite;
         }}
 
-        /* --- 1. THE INFINITY TRACER (SEAMLESS CHASE) --- */
+        /* --- 1. THE ELASTIC TRACER (SEPARATE ANIMATIONS) --- */
         .svg-complex-tracer {{
             position: absolute;
             width: 380px; height: 380px;
             z-index: 5;
-            /* Rotate the container slowly for dynamic angle */
             animation: spin-slow 20s linear infinite;
         }}
 
-        /* THE CHASE LOGIC:
-           Path Length ~1400.
-           Both animate from 1400 to 0 (one full loop).
-           White starts at -0.25s (Ahead).
-           Color starts at 0s (Behind).
-        */
-
-        /* Trace 1: White Leader (Thin) */
+        /* Trace 1: White Rabbit (Linear Constant Speed) */
         .trace-white {{
             fill: none;
             stroke: #ffffff;
@@ -101,12 +93,11 @@ def render_jarvis_ui(state="idle"):
             /* Dash = 300, Gap = 1100 (Total 1400) */
             stroke-dasharray: 300 1100;
             
-            /* Speed: 3s per loop. Delay: -0.25s (Starts ahead) */
-            animation: trace-loop 3s linear infinite;
-            animation-delay: -0.25s; 
+            /* Moves steadily 1400 -> 0 */
+            animation: trace-rabbit 4s linear infinite;
         }}
 
-        /* Trace 2: Color Follower (Thick) */
+        /* Trace 2: Color Chaser (Elastic Speed) */
         .trace-color {{
             fill: none;
             stroke: {c};
@@ -117,9 +108,8 @@ def render_jarvis_ui(state="idle"):
             /* Dash = 400, Gap = 1000 (Total 1400) */
             stroke-dasharray: 400 1000;
             
-            /* Speed: 3s per loop. Delay: 0s (Starts normal) */
-            animation: trace-loop 3s linear infinite;
-            animation-delay: 0s;
+            /* Moves dynamically to catch up and fall back */
+            animation: trace-chaser 4s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
         }}
 
         /* --- 2. RINGS & ELEMENTS --- */
@@ -186,12 +176,21 @@ def render_jarvis_ui(state="idle"):
             100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
         }}
 
-        /* THE INFINITY LOOP ANIMATION */
-        /* Moves the dash offset by exactly one full path length (1400) */
-        @keyframes trace-loop {{
+        /* THE RABBIT: Constant Linear Speed */
+        @keyframes trace-rabbit {{
             0% {{ stroke-dashoffset: 1400; }}
             100% {{ stroke-dashoffset: 0; }}
         }}
+
+        /* THE CHASER: Variable Speed */
+        @keyframes trace-chaser {{
+            0% {{ stroke-dashoffset: 1800; }} /* Starts 400 units BEHIND white */
+            
+            50% {{ stroke-dashoffset: 750; }} /* CATCH UP! Gap closes to 50 units (White is at 700) */
+            
+            100% {{ stroke-dashoffset: 400; }} /* Falls back to 400 units BEHIND (White is at 0) */
+        }}
+        /* Note: 400 offset at end is visually identical to 1800 offset at start due to 1400 loop length */
 
         @keyframes morph-north {{
             0%, 100% {{ transform: translate(-50%, -200px); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
