@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v12.0 UI (Infinite Jagged Loop).
+    Renders the N.A.O.M.I v12.0 UI (The Infinite Chase).
     """
     
     # --- COLOR PALETTE ---
@@ -63,7 +63,7 @@ def render_jarvis_ui(state="idle"):
             position: absolute;
             width: 480px; height: 480px;
             z-index: 0;
-            animation: spin-slow 30s linear infinite;
+            animation: spin-slow 60s linear infinite;
         }}
         .tracer-path-bg {{
             fill: none;
@@ -80,51 +80,41 @@ def render_jarvis_ui(state="idle"):
             position: absolute;
             width: 380px; height: 380px;
             z-index: 5;
-            /* Slow rotation of the entire track for dynamism */
-            animation: spin-slow 60s linear infinite;
+            /* Rotate the whole shape slowly against the grain */
+            animation: spin-slow 45s linear infinite reverse;
         }}
 
-        /* PATH MATH:
-           The Jagged shape is approx 1300 units long.
-           To make it loop seamlessly, DashArray + Gap must = 1300.
-        */
+        /* PATH LOGIC: Total Length approx 1300 */
 
-        /* Trace 1: White Leader (The Spark) */
+        /* Trace 1: White Leader */
         .trace-white {{
             fill: none;
             stroke: #ffffff;
-            stroke-width: 2;
+            stroke-width: 1.5;
             stroke-linecap: round;
+            /* Dash: 400px Line, 900px Gap (Total 1300) */
+            stroke-dasharray: 400 900; 
             
-            /* Dash: 50px line, 1250px gap. (Total 1300) */
-            stroke-dasharray: 50 1250; 
-            
-            /* Animate offset from 0 to -1300 to loop */
-            animation: infinite-run 4s linear infinite;
+            /* Animate the offset endlessly */
+            animation: trace-infinite 3s cubic-bezier(0.5, 0, 0.5, 1) infinite;
         }}
 
-        /* Trace 2: Color Follower (The Tail) */
+        /* Trace 2: Color Chaser */
         .trace-color {{
             fill: none;
             stroke: {c};
             stroke-width: 5;
             stroke-linecap: square;
             filter: drop-shadow(0 0 8px {c});
+            /* Dash: 150px Line, 1150px Gap (Total 1300) */
+            stroke-dasharray: 150 1150;
             
-            /* Dash: 300px line, 1000px gap. (Total 1300) */
-            stroke-dasharray: 300 1000;
-            
-            /* SYNCING:
-               To make the Color chase the White, we offset the animation delay?
-               No, smoother to just offset the start position.
-               
-               If White starts at offset 0.
-               Color should start "behind" it. 
-               Adding a positive dashoffset pushes the pattern back.
-               Let's set dashoffset start to 60 (just behind white's 50px tail).
+            /* Use the same animation but start 'behind' visually by adding to the offset in the dasharray definition? 
+               No, we use a slight delay or just the dasharray gap to position it.
+               Here we use the same animation keyframe so they move at the same speed, 
+               but the dash pattern puts the color block behind the white block.
             */
-            stroke-dashoffset: 60;
-            animation: infinite-run-chase 4s linear infinite;
+            animation: trace-infinite 3s cubic-bezier(0.5, 0, 0.5, 1) infinite;
         }}
 
         /* --- 2. RINGS & ELEMENTS --- */
@@ -191,20 +181,18 @@ def render_jarvis_ui(state="idle"):
             100% {{ stroke-dasharray: 1445 1445; stroke-dashoffset: -1445; }}
         }}
 
-        /* INFINITE LOOPS */
-        /* Path length 1300. We move -1300 units to complete one cycle visually */
-        @keyframes infinite-run {{
-            0% {{ stroke-dashoffset: 0; }}
-            100% {{ stroke-dashoffset: -1300; }}
-        }}
-        
-        /* Chase needs to start at offset 60, and end at 60-1300 = -1240 */
-        @keyframes infinite-run-chase {{
-            0% {{ stroke-dashoffset: 60; }}
-            100% {{ stroke-dashoffset: -1240; }}
-        }}
+        /* INFINITE TRACE
+           The dashes travel exactly one full loop length (1300) 
+           so the loop is seamless. 
+           Start: Offset 1300 (Hidden/Start) -> End: Offset 0 (Wrapped)
+           Wait, to move FORWARD, offset goes Down. 
+           Offset 1300 -> 0.
+        */
+        @keyframes trace-infinite {
+            0% { stroke-dashoffset: 1300; }
+            100% { stroke-dashoffset: 0; }
+        }
 
-        /* MORPH LOGIC */
         @keyframes morph-north {{
             0%, 100% {{ transform: translate(-50%, -200px); clip-path: polygon(50% 0%, 100% 100%, 50% 80%, 0% 100%); }}
             50% {{ transform: translate(-50%, -260px); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
@@ -222,10 +210,6 @@ def render_jarvis_ui(state="idle"):
             50% {{ transform: translate(-260px, -50%) rotate(-90deg); clip-path: polygon(50% 0%, 80% 80%, 50% 60%, 20% 80%); }}
         }}
 
-        /* THINKING STATE: Speed up the infinite run */
-        .thinking .trace-white {{ animation-duration: 1s; }}
-        .thinking .trace-color {{ animation-duration: 1s; }}
-        
         .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
         @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
 
