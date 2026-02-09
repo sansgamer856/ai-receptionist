@@ -3,6 +3,7 @@ import datetime
 import traceback
 import smtplib
 import time
+import json
 import pytz 
 from email.mime.text import MIMEText
 
@@ -27,7 +28,7 @@ SCOPES = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapi
 SERVICE_ACCOUNT_FILE = 'credentials.json'
 TIMEZONE = 'America/New_York' 
 
-# --- SMART CATEGORIES (FROM YOUR SCREENSHOTS) ---
+# --- SMART CATEGORIES ---
 VALID_TYPES = ["Assignment", "Meeting", "Research", "Exam", "To-Do Item"]
 VALID_CATEGORIES = ["Combat Robotics", "Rocket Propulsion", "IEEE", "Fluids Research", "LRE Project", "General"]
 
@@ -165,7 +166,6 @@ def check_schedule(date_str: str = "today"):
 
 def add_to_schedule(summary: str, date_time: str, item_type: str, category: str, notes: str = "", duration_hours: float = 1.0):
     try:
-        # Enforce Valid Categories if AI hallucinates
         if item_type not in VALID_TYPES: item_type = "To-Do Item"
         if category not in VALID_CATEGORIES: category = "General"
 
@@ -248,12 +248,11 @@ tool_map = {
     'send_notification': send_notification
 }
 
-# --- AI BRAIN (Updated for Batch Processing) ---
+# --- AI BRAIN (Fixed Duplicate Logic) ---
 def process_message(user_input, chat_history):
     max_retries = len(api_keys) + 1 
     attempts = 0
 
-    # Strict System Instruction with Categories
     system_instruction = f"""
     You are a smart receptionist.
     1. When adding tasks, you MUST classify them using EXACTLY these values:
@@ -273,20 +272,28 @@ def process_message(user_input, chat_history):
             date_context = f" [System Info: Current NY Time is {get_current_time()}]"
             augmented_input = user_input + date_context
             
+            # 1. Attempt to get the initial intent
             response = chat.send_message(augmented_input)
             
-            # --- MULTI-STEP FUNCTION HANDLING ---
-            # We now collect ALL function calls in the response, not just the first one.
+            # 2. Extract Function Calls
             function_calls_found = []
-            
+            seen_calls = set() # Deduplication set
+
             for part in response.parts:
                 if part.function_call:
-                    function_calls_found.append(part.function_call)
+                    # Create a signature to check for duplicates (name + sorted args)
+                    fc = part.function_call
+                    signature = (fc.name, json.dumps(dict(fc.args), sort_keys=True))
+                    
+                    if signature not in seen_calls:
+                        function_calls_found.append(fc)
+                        seen_calls.add(signature)
             
+            # 3. If tools found, execute them
             if function_calls_found:
-                # If we found function calls, execute them ALL
                 function_responses = []
-                
+                all_results_text = []
+
                 for fc in function_calls_found:
                     func_name = fc.name
                     args = dict(fc.args)
@@ -298,8 +305,8 @@ def process_message(user_input, chat_history):
                         result = f"Error: Function {func_name} not found."
                     
                     print(f"✅ Tool Result: {result}")
-                    
-                    # Append result to the list of responses
+                    all_results_text.append(result)
+
                     function_responses.append({
                         "function_response": {
                             "name": func_name,
@@ -307,17 +314,16 @@ def process_message(user_input, chat_history):
                         }
                     })
                 
-                # Send ALL results back to Gemini in one go
-                final_response = chat.send_message(function_responses)
-                
+                # 4. CRITICAL FIX: Try to get the summary, but do NOT retry the whole loop if this fails.
                 try:
+                    final_response = chat.send_message(function_responses)
                     text = final_response.text
-                    # Fallback if Gemini says nothing
                     if not text or len(text.strip()) < 2:
-                        return "✅ All actions completed successfully."
+                        return f"✅ Actions completed:\n" + "\n".join(all_results_text)
                     return text
-                except ValueError:
-                    return "✅ Actions completed."
+                except Exception as inner_e:
+                    print(f"⚠️ Summary generation failed, but tools executed. Returning raw result. Error: {inner_e}")
+                    return f"✅ Actions completed successfully (Summary Unavailable):\n" + "\n".join(all_results_text)
 
             else:
                 return response.text
@@ -333,6 +339,9 @@ def process_message(user_input, chat_history):
         
         except Exception as e:
             traceback.print_exc()
-            return f"⚠️ System Error: {str(e)}"
+            # Only retry if we haven't executed tools yet (which is handled inside the try block now)
+            attempts += 1
+            print(f"⚠️ System Error (Retry {attempts}): {str(e)}")
+            time.sleep(1)
     
     return "⚠️ Error: Request failed."
