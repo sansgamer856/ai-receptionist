@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I v7.0 UI (Erratic Tech Ring).
+    Renders the N.A.O.M.I v8.0 UI (The Vector HUD).
     """
     
     # --- COLOR PALETTE ---
@@ -43,139 +43,140 @@ def render_jarvis_ui(state="idle"):
             align-items: center;
         }}
 
-        /* --- THE TITLE (PRESERVED PERFECT GLISTEN) --- */
+        /* --- TITLE (UNCHANGED) --- */
         .core-text {{
             position: absolute;
             z-index: 20;
             font-size: 32px;
             font-weight: 900;
             letter-spacing: 8px;
-            
-            /* The "Loading" Gradient Mask */
-            background: linear-gradient(
-                90deg, 
-                {c}40 0%, 
-                {c} 50%, 
-                {c}40 100%
-            );
+            background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
             background-size: 200% auto;
-            color: #000; /* Fallback */
+            color: #000;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            
             animation: text-shimmer 3s linear infinite;
         }}
 
-        /* --- 1. MEDIUM SOLID RADIAL LINE --- */
-        .ring-solid {{
+        /* --- 1. THE "SPLIT-ARC" RING (INNER) --- */
+        /* Thick ring with 3 cuts: Top-Right, Bottom, Top-Left */
+        .ring-arc {{
             position: absolute;
-            width: 220px; height: 220px;
+            width: 240px; height: 240px;
             border-radius: 50%;
-            border: 4px solid {c}; /* Medium thickness */
-            opacity: 1; /* Solid 100% */
-            box-shadow: 0 0 10px {c}40;
-            
-            /* Erratic Movement 1 */
-            animation: erratic-spin-1 12s cubic-bezier(0.68, -0.6, 0.32, 1.6) infinite;
-        }}
-
-        /* --- 2. TECH EXTRUSIONS (UNIQUE ELEMENTS) --- */
-        .ring-tech {{
-            position: absolute;
-            width: 250px; height: 250px; /* Hugs the medium line closely */
-            border-radius: 50%;
-            
-            /* Creating the "Extruding Elements" using Conic Gradients */
-            /* This makes solid blocks (100% opacity) of varying sizes */
-            background: conic-gradient(
-                transparent 0deg 10deg,
-                {c} 10deg 15deg,   /* Block 1 */
-                transparent 15deg 40deg,
-                {c} 40deg 50deg,   /* Block 2 (Larger) */
-                transparent 50deg 90deg,
-                {c} 90deg 92deg,   /* Block 3 (Tiny) */
-                transparent 92deg 140deg,
-                {c} 140deg 160deg, /* Block 4 (Huge) */
-                transparent 160deg 200deg,
-                {c} 200deg 205deg, /* Block 5 */
-                transparent 205deg 260deg,
-                {c} 260deg 275deg, /* Block 6 */
-                transparent 275deg 360deg
-            );
-            
-            /* Mask center to turn the pie chart into a ring with blocks */
-            -webkit-mask: radial-gradient(farthest-side, transparent 75%, black 76%);
-            mask: radial-gradient(farthest-side, transparent 75%, black 76%);
-            
-            /* Erratic Movement 2 (Different timing) */
-            animation: erratic-spin-2 9s cubic-bezier(0.4, 0.0, 0.2, 1) infinite;
-        }}
-
-        /* --- 3. THINNER OUTER LINE --- */
-        .ring-thin {{
-            position: absolute;
-            width: 280px; height: 280px; /* Slightly outside the tech ring */
-            border-radius: 50%;
-            border: 1px solid {c}; /* Thin */
+            border: 8px solid {c};
             opacity: 0.8;
             
-            /* Erratic Movement 3 */
-            animation: erratic-spin-1 15s cubic-bezier(0.68, -0.6, 0.32, 1.6) infinite reverse;
+            /* The Mask creates the "Cuts" in the ring */
+            -webkit-mask: conic-gradient(
+                from 0deg,
+                transparent 0deg 10deg,   /* Cut 1 */
+                black 10deg 110deg,       /* Solid Arc */
+                transparent 110deg 130deg,/* Cut 2 */
+                black 130deg 240deg,      /* Solid Arc */
+                transparent 240deg 260deg,/* Cut 3 */
+                black 260deg 360deg       /* Solid Arc */
+            );
+            mask: conic-gradient(from 0deg, transparent 0deg 10deg, black 10deg 110deg, transparent 110deg 130deg, black 130deg 240deg, transparent 240deg 260deg, black 260deg 360deg);
+            
+            animation: spin-smooth 20s linear infinite;
         }}
 
-        /* --- ERRATIC ANIMATIONS (Random-ish behavior) --- */
+        /* --- 2. THE "RULER" SCALE (MIDDLE) --- */
+        /* Hundreds of small tick marks */
+        .ring-scale {{
+            position: absolute;
+            width: 320px; height: 320px;
+            border-radius: 50%;
+            
+            /* Create ticks using gradient */
+            background: repeating-conic-gradient(
+                from 0deg,
+                {c} 0deg 0.5deg,    /* Tick (Thin) */
+                transparent 0.5deg 4deg /* Gap */
+            );
+            
+            /* Hollow out the center */
+            -webkit-mask: radial-gradient(farthest-side, transparent 85%, black 86%);
+            mask: radial-gradient(farthest-side, transparent 85%, black 86%);
+            
+            opacity: 0.6;
+            animation: spin-reverse 40s linear infinite;
+        }}
+
+        /* --- 3. THE "TARGET" TRIANGLES (CARDINAL POINTS) --- */
+        /* 4 Triangles pointing inward */
+        .ring-target {{
+            position: absolute;
+            width: 400px; height: 400px;
+            animation: spin-step 10s steps(1) infinite; /* Jumps instead of spins */
+        }}
         
-        /* Profile 1: Overshoots and reverses */
-        @keyframes erratic-spin-1 {{
+        .triangle-marker {{
+            position: absolute;
+            width: 0; height: 0;
+            border-left: 10px solid transparent;
+            border-right: 10px solid transparent;
+            border-top: 15px solid {c};
+            left: 50%; top: 0;
+            transform: translateX(-50%);
+        }}
+        /* Duplicate triangles for other sides using pseudo-elements would be complex, 
+           so we use box-shadow or multiple divs. Let's use 4 divs for cleaner code. */
+
+        /* --- 4. THE "CIRCUIT" DASHES (OUTER) --- */
+        .ring-dashed {{
+            position: absolute;
+            width: 440px; height: 440px;
+            border-radius: 50%;
+            border: 2px dashed {c};
+            opacity: 0.4;
+            animation: spin-smooth 60s linear infinite;
+        }}
+
+        /* --- ANIMATIONS --- */
+        @keyframes spin-smooth {{ 100% {{ transform: rotate(360deg); }} }}
+        @keyframes spin-reverse {{ 100% {{ transform: rotate(-360deg); }} }}
+        @keyframes text-shimmer {{ 0% {{ background-position: 200% center; }} 100% {{ background-position: -200% center; }} }}
+        
+        @keyframes spin-step {{
             0% {{ transform: rotate(0deg); }}
-            20% {{ transform: rotate(120deg); }} /* Fast Fwd */
-            40% {{ transform: rotate(90deg); }}  /* Short Reverse */
-            60% {{ transform: rotate(240deg); }} /* Fast Fwd */
-            80% {{ transform: rotate(220deg); }} /* Short Reverse */
+            25% {{ transform: rotate(90deg); }}
+            50% {{ transform: rotate(180deg); }}
+            75% {{ transform: rotate(270deg); }}
             100% {{ transform: rotate(360deg); }}
         }}
-
-        /* Profile 2: Pauses and jerks */
-        @keyframes erratic-spin-2 {{
-            0% {{ transform: rotate(0deg); }}
-            30% {{ transform: rotate(-50deg); }} /* Reverse */
-            50% {{ transform: rotate(20deg); }}  /* Fwd */
-            70% {{ transform: rotate(10deg); }}  /* Pause/Slow Reverse */
-            100% {{ transform: rotate(360deg); }}
-        }}
-
-        @keyframes text-shimmer {{ 
-            0% {{ background-position: 200% center; }} 
-            100% {{ background-position: -200% center; }} 
-        }}
         
-        @keyframes bounce {{ 
-            0% {{ transform: scale(1); }} 
-            100% {{ transform: scale(1.02); }} 
-        }}
+        @keyframes pulse-scale {{ 0% {{ transform: scale(1); opacity: 0.6; }} 50% {{ transform: scale(1.02); opacity: 0.8; }} 100% {{ transform: scale(1); opacity: 0.6; }} }}
+        @keyframes bounce {{ 0% {{ transform: scale(1); }} 100% {{ transform: scale(1.02); }} }}
 
         /* --- STATE LOGIC --- */
+        .thinking .ring-arc {{ animation: spin-smooth 2s linear infinite; border-width: 4px; }}
+        .thinking .ring-scale {{ animation: spin-reverse 4s linear infinite; }}
         
-        /* THINKING: Speed up drastically */
-        .thinking .ring-solid {{ animation-duration: 2s; }}
-        .thinking .ring-tech {{ animation-duration: 1.5s; }}
-        .thinking .ring-thin {{ animation-duration: 3s; }}
-        
-        /* SPEAKING: Bounce */
+        /* Speaking: Bounce + Color Mix */
         .speaking .reactor {{ animation: bounce 0.2s infinite alternate; }}
+        .speaking .ring-arc {{ border-color: #ffffff; box-shadow: 0 0 10px {c}; }}
         
-        /* LISTENING: Expand slightly */
-        .listening .ring-thin {{ transform: scale(1.1); transition: transform 1s; }}
+        /* Listening: Scale breathes */
+        .listening .ring-scale {{ animation: pulse-scale 2s infinite ease-in-out; }}
 
     </style>
     </head>
     <body>
         <div class="reactor {state}">
-            <div class="ring-thin"></div>
+            <div class="ring-dashed"></div>
 
-            <div class="ring-tech"></div>
+            <div class="ring-target">
+                <div class="triangle-marker" style="top: 0; transform: translateX(-50%) rotate(0deg);"></div>
+                <div class="triangle-marker" style="top: 50%; right: -10px; transform: translateY(-50%) rotate(-90deg); left: auto;"></div>
+                <div class="triangle-marker" style="bottom: 0; top: auto; transform: translateX(-50%) rotate(180deg);"></div>
+                <div class="triangle-marker" style="top: 50%; left: -10px; transform: translateY(-50%) rotate(90deg);"></div>
+            </div>
 
-            <div class="ring-solid"></div>
+            <div class="ring-scale"></div>
+
+            <div class="ring-arc"></div>
 
             <div class="core-text">N.A.O.M.I.</div>
         </div>
