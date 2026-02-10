@@ -15,44 +15,51 @@ if "last_processed_audio" not in st.session_state:
 
 # --- MAIN PROCESSOR ---
 def process_command(user_text):
+    """
+    Executes the command and updates the UI flow.
+    """
+    
     # 1. STATE: THINKING
-    placeholder.empty()
-    with placeholder:
+    # We use placeholder.container() to clear the previous state and render the new one
+    with placeholder.container():
         render_jarvis_ui("thinking")
     
-    # 2. RUN BACKEND
+    # 2. RUN BACKEND (The Brain)
     try:
-        # Pass history to Gemini
+        # Pass full history to Gemini so it remembers context
         ai_response = backend.process_message(user_text, st.session_state.messages)
     except Exception as e:
-        ai_response = f"Error: {e}"
+        ai_response = f"I encountered an error: {e}"
         
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
     
     # 3. GENERATE SPEECH (Server Side)
+    # This creates the audio bytes to send to the browser
     audio_bytes = voice_engine.get_audio_response(ai_response)
     
-    # 4. STATE: SPEAKING & PLAY AUDIO
-    # We use st.audio with autoplay=True. 
-    # This sends the audio back to the browser to play.
-    with placeholder:
+    # 4. STATE: SPEAKING
+    # CRITICAL FIX: We render BOTH the Animation AND the Audio inside the container
+    with placeholder.container():
         render_jarvis_ui("speaking")
+        
+        # This audio widget will appear directly BELOW the animation
         st.audio(audio_bytes, format="audio/mp3", autoplay=True)
         
-    # Wait roughly for audio to finish (estimated) before going idle
-    # (Streamlit can't know exactly when audio finishes playing on client)
-    time.sleep(len(ai_response) / 10) 
+    # Wait for audio to finish (Rough estimate based on text length)
+    # Avg reading speed ~15 chars per second. We add a buffer.
+    time.sleep(len(ai_response) / 13) 
     
     # 5. STATE: IDLE
-    with placeholder:
+    with placeholder.container():
         render_jarvis_ui("idle")
 
 # --- UI LAYOUT ---
 
+# The main dynamic area
 placeholder = st.empty()
 
-# Render Initial State (Only if not currently processing)
-with placeholder:
+# Render Initial State
+with placeholder.container():
     render_jarvis_ui("idle")
 
 st.markdown("---")
@@ -61,29 +68,29 @@ col1, col2, col3 = st.columns([1, 2, 1])
 with col2:
     # 1. TEXT INPUT
     with st.form("text_form"):
-        text_input = st.text_input("Type Command")
-        submit_text = st.form_submit_button("SEND")
+        text_input = st.text_input("Type Command", placeholder="Or use the microphone below...")
+        submit_text = st.form_submit_button("SEND TEXT")
 
-    # 2. AUDIO INPUT (The Online Mic)
-    # This widget appears in the browser. When you stop recording, it re-runs the app.
-    audio_value = st.audio_input("Voice Command")
+    # 2. AUDIO INPUT (Streamlit 1.40+)
+    # This native widget handles recording in the browser
+    audio_value = st.audio_input("Microphone Link")
 
 # --- LOGIC FLOW ---
 
-# HANDLE TEXT
+# HANDLE TEXT INPUT
 if submit_text and text_input:
     st.session_state.messages.append({"role": "user", "content": text_input})
     process_command(text_input)
 
-# HANDLE AUDIO
-# We check if audio_value exists AND if it's different from the last one we processed
+# HANDLE VOICE INPUT
 if audio_value and audio_value != st.session_state.last_processed_audio:
     st.session_state.last_processed_audio = audio_value
     
-    with placeholder:
+    # Show "Listening" state while we upload/transcribe
+    with placeholder.container():
         render_jarvis_ui("listening")
     
-    # Save the uploaded file temporarily so SpeechRecognition can read it
+    # Save the uploaded file temporarily
     with open("temp_input.wav", "wb") as f:
         f.write(audio_value.read())
     
@@ -95,8 +102,11 @@ if audio_value and audio_value != st.session_state.last_processed_audio:
         process_command(detected_text)
     else:
         st.error("Could not understand audio.")
+        time.sleep(2)
+        with placeholder.container():
+            render_jarvis_ui("idle")
 
-# --- LOGS ---
+# --- LOGS (Optional, for debugging) ---
 with st.expander("System Logs"):
     for msg in st.session_state.messages:
         role = msg['role'].upper()
