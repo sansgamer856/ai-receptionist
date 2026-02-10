@@ -2,7 +2,7 @@ import streamlit as st
 import time
 import base64
 import uuid
-from ui_components import render_jarvis_ui
+from ui_components import render_jarvis_ui, render_subtitles
 import voice_engine
 import backend
 
@@ -18,14 +18,17 @@ if "last_audio" not in st.session_state:
 # --- CSS ARCHITECTURE ---
 st.markdown("""
 <style>
-    /* 1. CONTAINER FIXES (Remove the Box) */
+    /* --- 1. MIC BUTTON POSITIONING --- */
     [data-testid="stAudioInput"] {
         width: 70px !important;
         height: 70px !important;
         margin: 0 auto !important;
+        
+        /* PULL UP: Move closer to the reactor */
+        margin-top: -60px !important; 
+        
         background: transparent !important;
-        border: none !important;
-        overflow: visible !important; /* Fixes the cutoff */
+        overflow: visible !important;
         position: relative;
         z-index: 1000;
     }
@@ -33,11 +36,9 @@ st.markdown("""
     [data-testid="stAudioInput"] > div {
         padding: 0 !important;
         background: transparent !important;
-        border: none !important;
-        overflow: visible !important;
     }
 
-    /* 2. HIDE JUNK (Waveform, Trash, Time) */
+    /* HIDE THE UGLY BARS */
     [data-testid="stAudioInput"] canvas,
     [data-testid="stAudioInput"] div[data-testid="stMarkdownContainer"],
     [data-testid="stAudioInput"] div[data-testid="stWidgetLabel"],
@@ -46,54 +47,50 @@ st.markdown("""
         display: none !important;
     }
 
-    /* 3. THE BUTTON (Unpressed) */
+    /* --- 2. MIC BUTTON STYLE --- */
     [data-testid="stAudioInput"] button[kind="primary"] {
         width: 70px !important;
         height: 70px !important;
         border-radius: 50% !important;
-        background: rgba(20, 20, 20, 0.9) !important;
-        border: 2px solid #333 !important;
-        color: #555 !important;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        background: rgba(20, 20, 20, 0.4) !important; /* Subtle glass */
+        border: 1px solid #444 !important;
+        color: #666 !important; /* Dim icon */
+        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        transition: all 0.3s ease;
     }
 
-    /* Hover */
+    /* Hover State */
     [data-testid="stAudioInput"] button[kind="primary"]:hover {
-        border-color: #00f3ff !important;
-        color: #00f3ff !important;
-        box-shadow: 0 0 20px rgba(0, 243, 255, 0.3);
-        transform: scale(1.05);
+        border-color: #d600ff !important;
+        color: #d600ff !important;
+        box-shadow: 0 0 15px #d600ff60;
+        transform: scale(1.1);
     }
 
-    /* 4. THE MAGIC TOGGLE (Listening State) */
-    /* When the microphone is active (recording), Streamlit adds a specific class or state. 
-       We capture the 'focus' or 'active' state of the button wrapper. */
+    /* --- 3. THE "ACTION AT A DISTANCE" (Mic -> Reactor Link) --- */
     
-    [data-testid="stAudioInput"]:focus-within button[kind="primary"] {
-        background: rgba(0, 243, 255, 0.1) !important;
-        border-color: #00f3ff !important;
-        box-shadow: 0 0 30px #00f3ff, inset 0 0 20px #00f3ff !important;
-        color: #00f3ff !important;
-        animation: pulse-recording 1.5s infinite;
+    /* When the Mic is Active/Focused (Pressed): */
+    
+    /* A. Scale the Reactor Up */
+    body:has([data-testid="stAudioInput"]:focus-within) .reactor {
+        transform: scale(1.05) !important;
+    }
+    
+    /* B. Turn Rings Neon Purple (#d600ff) */
+    body:has([data-testid="stAudioInput"]:focus-within) .blob-ring {
+        border-color: #d600ff !important;
+        box-shadow: 0 0 40px #d600ff60 !important;
+        opacity: 0.9 !important;
+        border-width: 3px !important;
+    }
+    
+    /* C. Turn Text Neon Purple */
+    body:has([data-testid="stAudioInput"]:focus-within) .core-text {
+        color: #d600ff !important;
+        text-shadow: 0 0 20px #d600ff !important;
     }
 
-    @keyframes pulse-recording {
-        0% { box-shadow: 0 0 10px #00f3ff; }
-        50% { box-shadow: 0 0 30px #00f3ff; }
-        100% { box-shadow: 0 0 10px #00f3ff; }
-    }
-
-    /* 5. REACTOR LINKING */
-    /* This makes the REACTOR above turn purple/cyan when you hold the button */
-    
-    /* LISTENING MODE (Cyan) - Triggered by focus/click */
-    body:has([data-testid="stAudioInput"]:focus-within) .reactor .core-inner {
-        background: #00f3ff !important;
-        box-shadow: 0 0 60px #00f3ff !important;
-    }
-    
-    /* HIDE HEADER/FOOTER */
+    /* Hide Header/Footer */
     header, footer {visibility: hidden;}
     
 </style>
@@ -102,12 +99,12 @@ st.markdown("""
 # --- ROBUST AUDIO PLAYER ---
 def autoplay_audio(audio_data):
     try:
-        if hasattr(audio_data, 'read'):
-            audio_bytes = audio_data.read()
-        else:
-            audio_bytes = audio_data
+        if hasattr(audio_data, 'read'): audio_bytes = audio_data.read()
+        else: audio_bytes = audio_data
         b64 = base64.b64encode(audio_bytes).decode()
         unique_id = f"audio_{uuid.uuid4().hex}"
+        
+        # Using playsinline for mobile compatibility
         md = f"""
             <audio id="{unique_id}" autoplay playsinline style="display:none;">
                 <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
@@ -125,12 +122,12 @@ def autoplay_audio(audio_data):
 # --- PROCESSOR ---
 def process_command(user_text):
     
-    # 1. THINKING (Triggered immediately after recording stops)
+    # 1. VISUAL: THINKING (Gold/Amber)
     placeholder_visual.empty()
     with placeholder_visual.container():
         render_jarvis_ui("thinking")
     
-    # 2. BACKEND
+    # 2. LOGIC: BACKEND
     try:
         ai_response = backend.process_message(user_text, st.session_state.messages)
     except Exception as e:
@@ -138,31 +135,33 @@ def process_command(user_text):
         
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
     
-    # 3. SPEAKING
+    # 3. VISUAL: SPEAKING (Green/Cyan + Subtitles)
     audio_io = voice_engine.get_audio_response(ai_response)
     
     with placeholder_visual.container():
         render_jarvis_ui("speaking")
+        render_subtitles(ai_response) # <--- ENABLED
         if audio_io: autoplay_audio(audio_io)
     
-    # 4. IDLE
+    # 4. IDLE DELAY
     time.sleep(max(3, len(ai_response) * 0.07))
     with placeholder_visual.container():
         render_jarvis_ui("idle")
 
-# --- UI STACK ---
+# --- UI LAYOUT ---
 
 # 1. THE REACTOR
 placeholder_visual = st.empty()
 with placeholder_visual.container():
     render_jarvis_ui("idle")
 
-st.write("") # Spacer
+# 2. SPACER (Just a small one)
+st.write("") 
 
-# 2. THE MIC
+# 3. THE MIC
 audio_value = st.audio_input("Voice Uplink")
 
-# 3. MANUAL OVERRIDE (Hidden Menu)
+# 4. MANUAL OVERRIDE (Hidden Menu)
 with st.expander("Manual Override"):
     with st.form("manual"):
         txt = st.text_input("Command")
@@ -175,7 +174,7 @@ with st.expander("Manual Override"):
 if audio_value and audio_value != st.session_state.last_audio:
     st.session_state.last_audio = audio_value
     
-    # Force 'Thinking' UI immediately since we have the file
+    # Immediate 'Thinking' Feedback (since recording is done)
     with placeholder_visual.container():
         render_jarvis_ui("thinking")
         
@@ -188,5 +187,6 @@ if audio_value and audio_value != st.session_state.last_audio:
         st.session_state.messages.append({"role": "user", "content": detected_text})
         process_command(detected_text)
     else:
+        # Return to idle if no voice found
         with placeholder_visual.container():
             render_jarvis_ui("idle")
