@@ -1,6 +1,8 @@
 import streamlit as st
 import time
-from ui_components import render_jarvis_ui
+# Ensure ui_components.py exists in your repo with the Subtitle/CSS code provided earlier
+from ui_components import render_jarvis_ui, render_subtitles 
+# Ensure voice_engine.py is the Cloud-Compatible version (File/Bytes based)
 import voice_engine
 import backend
 
@@ -10,105 +12,120 @@ st.set_page_config(layout="wide", page_title="N.A.O.M.I. Core")
 # --- SESSION STATE ---
 if "messages" not in st.session_state:
     st.session_state.messages = []
-if "last_processed_audio" not in st.session_state:
-    st.session_state.last_processed_audio = None
+if "last_audio" not in st.session_state:
+    st.session_state.last_audio = None
 
 # --- MAIN PROCESSOR ---
 def process_command(user_text):
     """
-    Executes the command and updates the UI flow.
+    Executes the command and updates the UI flow:
+    Thinking -> Backend -> Speaking (w/ Subtitles) -> Idle
     """
     
     # 1. STATE: THINKING
-    # We use placeholder.container() to clear the previous state and render the new one
+    # Clear placeholder and show thinking animation
+    placeholder.empty()
     with placeholder.container():
         render_jarvis_ui("thinking")
     
     # 2. RUN BACKEND (The Brain)
     try:
-        # Pass full history to Gemini so it remembers context
+        # Pass history for context
         ai_response = backend.process_message(user_text, st.session_state.messages)
     except Exception as e:
-        ai_response = f"I encountered an error: {e}"
+        ai_response = f"System Error: {str(e)}"
         
+    # Append response to history
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
     
-    # 3. GENERATE SPEECH (Server Side)
-    # This creates the audio bytes to send to the browser
+    # 3. GENERATE AUDIO (Server Side)
+    # voice_engine.get_audio_response must return raw bytes!
     audio_bytes = voice_engine.get_audio_response(ai_response)
     
     # 4. STATE: SPEAKING
-    # CRITICAL FIX: We render BOTH the Animation AND the Audio inside the container
+    # We render Animation + Subtitles + Audio Player in one container
     with placeholder.container():
+        # A. The Animation
         render_jarvis_ui("speaking")
         
-        # This audio widget will appear directly BELOW the animation
+        # B. The Subtitles (Cinematic text under ring)
+        render_subtitles(ai_response)
+        
+        # C. The Audio Player 
+        # (CSS in ui_components will force this to bottom of screen)
         st.audio(audio_bytes, format="audio/mp3", autoplay=True)
         
-    # Wait for audio to finish (Rough estimate based on text length)
-    # Avg reading speed ~15 chars per second. We add a buffer.
-    time.sleep(len(ai_response) / 13) 
+    # 5. DURATION HOLD
+    # Calculate how long to keep the "Speaking" state active
+    # (Approx 12 chars/sec + 1s buffer)
+    wait_time = (len(ai_response) / 12) + 1
+    time.sleep(wait_time)
     
-    # 5. STATE: IDLE
+    # 6. STATE: IDLE
     with placeholder.container():
         render_jarvis_ui("idle")
 
 # --- UI LAYOUT ---
 
-# The main dynamic area
+# The Main Dynamic Container (Top Center)
 placeholder = st.empty()
 
-# Render Initial State
+# Render Initial "Idle" State
 with placeholder.container():
     render_jarvis_ui("idle")
 
+# Divider
 st.markdown("---")
+
+# Input Controls (Bottom)
 col1, col2, col3 = st.columns([1, 2, 1])
 
 with col2:
-    # 1. TEXT INPUT
+    # A. Text Input Form
     with st.form("text_form"):
-        text_input = st.text_input("Type Command", placeholder="Or use the microphone below...")
-        submit_text = st.form_submit_button("SEND TEXT")
+        text_input = st.text_input("Manual Override", placeholder="Type a command...")
+        submit_text = st.form_submit_button("SEND")
 
-    # 2. AUDIO INPUT (Streamlit 1.40+)
-    # This native widget handles recording in the browser
-    audio_value = st.audio_input("Microphone Link")
+    # B. Audio Input Widget (Browser Microphone)
+    # This widget is native to Streamlit 1.40+ and works online.
+    audio_value = st.audio_input("Voice Uplink")
 
-# --- LOGIC FLOW ---
+# --- TRIGGER LOGIC ---
 
-# HANDLE TEXT INPUT
+# 1. Handle Text Input
 if submit_text and text_input:
     st.session_state.messages.append({"role": "user", "content": text_input})
     process_command(text_input)
 
-# HANDLE VOICE INPUT
-if audio_value and audio_value != st.session_state.last_processed_audio:
-    st.session_state.last_processed_audio = audio_value
+# 2. Handle Audio Input
+if audio_value and audio_value != st.session_state.last_audio:
+    # Update state to prevent infinite rerun loop
+    st.session_state.last_audio = audio_value
     
-    # Show "Listening" state while we upload/transcribe
+    # Show "Listening" State briefly while we process the file
     with placeholder.container():
         render_jarvis_ui("listening")
     
-    # Save the uploaded file temporarily
+    # Save the uploaded audio byte stream to a temp file
+    # This is required because SpeechRecognition needs a file path
     with open("temp_input.wav", "wb") as f:
         f.write(audio_value.read())
     
-    # Transcribe
+    # Send file to Speech-to-Text
     detected_text = voice_engine.transcribe_audio("temp_input.wav")
     
     if detected_text:
+        # If we heard something, run the main flow
         st.session_state.messages.append({"role": "user", "content": detected_text})
         process_command(detected_text)
     else:
-        st.error("Could not understand audio.")
+        st.error("Audio signal unclear. Please retry.")
         time.sleep(2)
         with placeholder.container():
             render_jarvis_ui("idle")
 
-# --- LOGS (Optional, for debugging) ---
-with st.expander("System Logs"):
+# --- SYSTEM LOGS (Hidden in Expander) ---
+with st.expander("Neural Logs"):
     for msg in st.session_state.messages:
-        role = msg['role'].upper()
-        content = msg['content']
-        st.write(f"**{role}:** {content}")
+        role = "AI" if msg['role'] == "assistant" else "USER"
+        st.write(f"**{role}:** {msg['content']}")
