@@ -15,88 +15,71 @@ if "messages" not in st.session_state:
 if "last_audio" not in st.session_state:
     st.session_state.last_audio = None
 
-# --- CSS FOR "BALL MIC" INTEGRATION ---
-# This CSS is aggressive. It targets the internal structure of the Audio Input widget.
+# --- DEEP CSS INTEGRATION ---
 st.markdown("""
 <style>
-    /* 1. CONTAINER POSITIONING */
-    /* Move the whole audio widget UP into the reactor space */
+    /* 1. HIDE DEFAULT ELEMENTS */
+    header, footer {visibility: hidden;}
+    
+    /* 2. PHANTOM BUTTON SETUP */
+    /* Target the container of the audio input */
     div[data-testid="stAudioInput"] {
-        margin-top: -250px !important; /* Pulls it up significantly */
+        width: 300px !important;    /* Match Reactor Size */
+        height: 300px !important;   
+        margin: 0 auto !important;
+        margin-top: -300px !important; /* PULL IT UP over the reactor */
         position: relative;
-        z-index: 999; /* Sit ON TOP of the reactor */
-        width: 200px !important; /* Force a small width */
-        margin-left: auto;
-        margin-right: auto;
+        z-index: 999; /* TOP LAYER */
     }
 
-    /* 2. THE BUTTON ITSELF */
-    /* We make the button huge, round, and transparent-ish so it acts as the 'core' */
+    /* 3. STYLE THE INTERNAL BUTTON (The Click Target) */
     div[data-testid="stAudioInput"] button {
-        width: 120px !important;
-        height: 120px !important;
+        width: 100% !important;
+        height: 100% !important;
         border-radius: 50% !important;
-        background-color: rgba(0, 243, 255, 0.1) !important; /* Faint Cyan */
-        border: 2px solid #00f3ff !important;
-        box-shadow: 0 0 20px #00f3ff !important;
-        color: transparent !important; /* Hide the mic icon if possible, or let it sit there */
-        transition: all 0.3s ease;
-    }
-
-    /* Hover State */
-    div[data-testid="stAudioInput"] button:hover {
-        background-color: rgba(0, 243, 255, 0.3) !important;
-        transform: scale(1.1);
-        box-shadow: 0 0 40px #00f3ff !important;
-    }
-
-    /* Active/Recording State (Streamlit changes styling when active, we catch generic) */
-    div[data-testid="stAudioInput"] button:active {
-        border-color: #d600ff !important;
-        box-shadow: 0 0 30px #d600ff !important;
+        background: transparent !important; /* See-through */
+        border: none !important;
+        color: transparent !important; /* Hide icon */
+        cursor: pointer;
     }
     
-    /* Hide the label "Voice Uplink" */
-    label[data-testid="stWidgetLabel"] {
-        display: none;
+    /* Optional: Add a subtle feedback when hovering the 'ball' */
+    div[data-testid="stAudioInput"] button:hover {
+        background: rgba(255, 255, 255, 0.05) !important;
     }
-
-    /* Hide text input details to keep it clean */
-    .stTextInput { display: none; } 
+    
+    /* 4. HIDE THE UGLY 'RESULT' PLAYER */
+    /* Once recorded, Streamlit shows an audio player. We hide it to keep the ball clean. */
+    div[data-testid="stAudioInput"] audio {
+        display: none !important;
+    }
+    
+    /* Hide the label */
+    label[data-testid="stWidgetLabel"] { display: none; }
     
 </style>
 """, unsafe_allow_html=True)
 
-# --- AUDIO PLAYER (NO DOWNLOAD) ---
+# --- AUDIO PLAYBACK (No Download Prompts) ---
 def autoplay_audio(audio_bytes):
     """
-    Embeds audio using Base64 Data URI. 
-    This prevents the 'Download' prompt on mobile by forcing inline playback.
+    Injects HTML5 Audio using Base64. 
+    Prevents mobile download prompts by playing inline.
     """
     unique_id = f"audio_{uuid.uuid4().hex}"
+    b64 = base64.b64encode(audio_bytes.read()).decode()
     
-    # Read bytes
-    audio_data = audio_bytes.read()
-    b64 = base64.b64encode(audio_data).decode()
-    
-    # HTML5 Audio Tag
-    # type="audio/mpeg" is crucial for EdgeTTS (which outputs MP3)
     md = f"""
         <audio id="{unique_id}" autoplay playsinline style="display:none;">
-            <source src="data:audio/mpeg;base64,{b64}" type="audio/mpeg">
+            <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
         </audio>
-        
         <script>
-            // Auto-trigger play
             setTimeout(function() {{
                 var audio = document.getElementById("{unique_id}");
                 if (audio) {{
-                    audio.play().catch(function(e) {{
-                        console.log("Autoplay blocked, showing controls: " + e);
-                        audio.style.display = "block"; // Show player if autoplay fails
-                    }});
+                    audio.play().catch(e => console.log("Autoplay blocked: " + e));
                 }}
-            }}, 300);
+            }}, 200);
         </script>
         """
     st.markdown(md, unsafe_allow_html=True)
@@ -104,60 +87,57 @@ def autoplay_audio(audio_bytes):
 # --- PROCESSOR ---
 def process_command(user_text):
     
-    # 1. THINKING
+    # 1. THINKING STATE
     placeholder_visual.empty()
     with placeholder_visual.container():
         render_jarvis_ui("thinking")
     
-    # 2. BACKEND
+    # 2. BACKEND PROCESSING
     try:
         ai_response = backend.process_message(user_text, st.session_state.messages)
     except Exception as e:
-        ai_response = f"Neural Link Error: {e}"
+        ai_response = f"System Error: {e}"
         
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
     
-    # 3. SPEAKING
-    # Generate Audio
+    # 3. SPEAKING STATE
     audio_io = voice_engine.get_audio_response(ai_response)
     
     with placeholder_visual.container():
         render_jarvis_ui("speaking")
         render_subtitles(ai_response)
-        
         if audio_io:
             autoplay_audio(audio_io)
     
-    # 4. IDLE DELAY
-    wait_time = len(ai_response) * 0.08
-    time.sleep(max(3, wait_time)) 
+    # 4. IDLE RESET
+    # Calculate reading time (approx)
+    wait_time = max(3, len(ai_response) * 0.08)
+    time.sleep(wait_time) 
     
     with placeholder_visual.container():
         render_jarvis_ui("idle")
 
-# --- MAIN LAYOUT ---
+# --- MAIN UI STACK ---
 
-# 1. VISUAL LAYER (Background)
+# 1. VISUAL LAYER (The Reactor)
 placeholder_visual = st.empty()
 with placeholder_visual.container():
     render_jarvis_ui("idle")
 
-# 2. INTERACTION LAYER (Foreground)
-# The CSS pulls this widget UP so it sits directly on top of the visual layer.
-# The user "Clicks the ball" -> Actually clicks this widget.
+# 2. INTERACTION LAYER (The Phantom Button)
+# This widget is physically located here, but CSS pulls it UP 300px 
+# to sit directly on top of the reactor above.
 audio_value = st.audio_input("Voice Uplink")
 
-# --- LOGIC ---
-
-# Trigger on Audio
+# --- LOGIC TRIGGER ---
 if audio_value and audio_value != st.session_state.last_audio:
     st.session_state.last_audio = audio_value
     
-    # Update UI to 'Listening' (Though usually Streamlit re-runs after stop)
+    # Visual feedback
     with placeholder_visual.container():
         render_jarvis_ui("listening")
-    
-    # Process
+        
+    # Process Audio
     with open("temp_input.wav", "wb") as f:
         f.write(audio_value.read())
         
@@ -167,13 +147,7 @@ if audio_value and audio_value != st.session_state.last_audio:
         st.session_state.messages.append({"role": "user", "content": detected_text})
         process_command(detected_text)
     else:
-        st.warning("No voice detected.")
+        st.warning("No audio detected.")
         time.sleep(1)
         with placeholder_visual.container():
             render_jarvis_ui("idle")
-
-# Optional: Hidden Text Input for Debugging (Access via expander if needed)
-with st.expander("Debug Access", expanded=False):
-    manual_text = st.text_input("Inject Command")
-    if st.button("Inject"):
-        process_command(manual_text)
