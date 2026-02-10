@@ -15,82 +15,98 @@ if "messages" not in st.session_state:
 if "last_audio" not in st.session_state:
     st.session_state.last_audio = None
 
-# --- CSS ARCHITECTURE ---
+# --- CSS MAGIC ---
 st.markdown("""
 <style>
-    /* --- 1. MIC BUTTON POSITIONING --- */
+    /* --- 1. HIDE THE UGLY 00:00 TIMER & JUNK --- */
     [data-testid="stAudioInput"] {
         width: 70px !important;
         height: 70px !important;
         margin: 0 auto !important;
-        
-        /* PULL UP: Move closer to the reactor */
-        margin-top: -60px !important; 
-        
-        background: transparent !important;
-        overflow: visible !important;
+        margin-top: -50px !important; /* Pull closer to ball */
         position: relative;
         z-index: 1000;
+        overflow: visible !important;
+    }
+
+    /* This specific selector targets the text container for the timer */
+    [data-testid="stAudioInput"] > div:first-child > div:first-child > div:nth-child(2),
+    [data-testid="stAudioInput"] [data-testid="stMarkdownContainer"] p {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0 !important;
     }
     
-    [data-testid="stAudioInput"] > div {
-        padding: 0 !important;
-        background: transparent !important;
-    }
-
-    /* HIDE THE UGLY BARS */
-    [data-testid="stAudioInput"] canvas,
-    [data-testid="stAudioInput"] div[data-testid="stMarkdownContainer"],
-    [data-testid="stAudioInput"] div[data-testid="stWidgetLabel"],
+    /* Hide waveform canvas */
+    [data-testid="stAudioInput"] canvas { display: none !important; }
+    
+    /* Hide secondary buttons (trash, etc) */
     [data-testid="stAudioInput"] button[kind="secondary"],
     [data-testid="stAudioInput"] button[kind="tertiary"] {
-        display: none !important;
+        display: none !important; 
     }
 
-    /* --- 2. MIC BUTTON STYLE --- */
+    /* --- 2. MIC BUTTON STYLING (The Toggle) --- */
     [data-testid="stAudioInput"] button[kind="primary"] {
         width: 70px !important;
         height: 70px !important;
         border-radius: 50% !important;
-        background: rgba(20, 20, 20, 0.4) !important; /* Subtle glass */
+        background: rgba(20, 20, 20, 0.4) !important;
         border: 1px solid #444 !important;
-        color: #666 !important; /* Dim icon */
+        color: #888 !important;
         box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
     }
 
-    /* Hover State */
+    /* Hover */
     [data-testid="stAudioInput"] button[kind="primary"]:hover {
         border-color: #d600ff !important;
         color: #d600ff !important;
         box-shadow: 0 0 15px #d600ff60;
-        transform: scale(1.1);
+        transform: scale(1.05);
     }
 
-    /* --- 3. THE "ACTION AT A DISTANCE" (Mic -> Reactor Link) --- */
+    /* --- 3. THE "LISTENING" STATE OVERRIDE --- */
+    /* This detects if the Stop Button exists (meaning we are recording) */
     
-    /* When the Mic is Active/Focused (Pressed): */
+    /* A. PULSE THE MIC BUTTON */
+    [data-testid="stAudioInput"] button[title="Stop recording"] {
+        background: rgba(214, 0, 255, 0.1) !important;
+        border-color: #d600ff !important;
+        box-shadow: 0 0 20px #d600ff !important;
+        color: #d600ff !important;
+        animation: pulse-mic 1.5s infinite;
+    }
+
+    /* B. FORCE THE REACTOR TO LOOK LIKE 'STATE=LISTENING' */
+    /* We copy the exact physics from ui_components.py here */
     
-    /* A. Scale the Reactor Up */
-    body:has([data-testid="stAudioInput"]:focus-within) .reactor {
+    body:has(button[title="Stop recording"]) .reactor {
         transform: scale(1.05) !important;
     }
-    
-    /* B. Turn Rings Neon Purple (#d600ff) */
-    body:has([data-testid="stAudioInput"]:focus-within) .blob-ring {
+
+    body:has(button[title="Stop recording"]) .blob-ring {
         border-color: #d600ff !important;
         box-shadow: 0 0 40px #d600ff60 !important;
         opacity: 0.9 !important;
         border-width: 3px !important;
     }
     
-    /* C. Turn Text Neon Purple */
-    body:has([data-testid="stAudioInput"]:focus-within) .core-text {
+    body:has(button[title="Stop recording"]) .core-text {
         color: #d600ff !important;
         text-shadow: 0 0 20px #d600ff !important;
+        /* Change the gradient text fill to purple */
+        background: linear-gradient(90deg, #d600ff40 0%, #d600ff 50%, #d600ff40 100%) !important;
+        -webkit-background-clip: text !important;
+        -webkit-text-fill-color: transparent !important;
     }
 
-    /* Hide Header/Footer */
+    @keyframes pulse-mic {
+        0% { box-shadow: 0 0 10px #d600ff; }
+        50% { box-shadow: 0 0 25px #d600ff; }
+        100% { box-shadow: 0 0 10px #d600ff; }
+    }
+
     header, footer {visibility: hidden;}
     
 </style>
@@ -103,8 +119,6 @@ def autoplay_audio(audio_data):
         else: audio_bytes = audio_data
         b64 = base64.b64encode(audio_bytes).decode()
         unique_id = f"audio_{uuid.uuid4().hex}"
-        
-        # Using playsinline for mobile compatibility
         md = f"""
             <audio id="{unique_id}" autoplay playsinline style="display:none;">
                 <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
@@ -122,7 +136,7 @@ def autoplay_audio(audio_data):
 # --- PROCESSOR ---
 def process_command(user_text):
     
-    # 1. VISUAL: THINKING (Gold/Amber)
+    # 1. VISUAL: THINKING (Amber)
     placeholder_visual.empty()
     with placeholder_visual.container():
         render_jarvis_ui("thinking")
@@ -135,12 +149,12 @@ def process_command(user_text):
         
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
     
-    # 3. VISUAL: SPEAKING (Green/Cyan + Subtitles)
+    # 3. VISUAL: SPEAKING (Green + Subtitles)
     audio_io = voice_engine.get_audio_response(ai_response)
     
     with placeholder_visual.container():
         render_jarvis_ui("speaking")
-        render_subtitles(ai_response) # <--- ENABLED
+        render_subtitles(ai_response) 
         if audio_io: autoplay_audio(audio_io)
     
     # 4. IDLE DELAY
@@ -155,7 +169,7 @@ placeholder_visual = st.empty()
 with placeholder_visual.container():
     render_jarvis_ui("idle")
 
-# 2. SPACER (Just a small one)
+# 2. SPACER
 st.write("") 
 
 # 3. THE MIC
