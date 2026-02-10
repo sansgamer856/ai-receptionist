@@ -1,64 +1,51 @@
 import speech_recognition as sr
 import edge_tts
-import pygame
 import asyncio
 import os
 
-# --- 1. THE EARS (Speech to Text) ---
-def listen_to_microphone():
+# --- 1. SPEECH TO TEXT (File Based) ---
+def transcribe_audio(audio_file_path):
     """
-    Listens to the default microphone and returns the text.
-    Uses Google's Free Speech Recognition API.
+    Takes an audio file path (WAV), reads it, and sends it to Google Free STT.
     """
     recognizer = sr.Recognizer()
     
-    # Adjust for ambient noise (crucial for accuracy)
-    with sr.Microphone() as source:
-        print("Adjusting for ambient noise...")
-        recognizer.adjust_for_ambient_noise(source, duration=0.5)
-        print("Listening...")
-        
-        # This will record until it hears a pause
-        try:
-            audio = recognizer.listen(source, timeout=5, phrase_time_limit=10)
-            print("Recognizing...")
-            text = recognizer.recognize_google(audio)
-            return text.lower()
-        except sr.WaitTimeoutError:
-            return None
-        except sr.UnknownValueError:
-            return None
-        except sr.RequestError:
-            return "API Error"
+    try:
+        # Use AudioFile instead of Microphone
+        with sr.AudioFile(audio_file_path) as source:
+            # We don't need adjust_for_ambient_noise for direct files usually, 
+            # but it doesn't hurt.
+            audio_data = recognizer.record(source)
+            
+        text = recognizer.recognize_google(audio_data)
+        return text.lower()
+    except sr.UnknownValueError:
+        return None
+    except sr.RequestError:
+        return "API Error"
+    except Exception as e:
+        return f"Error: {e}"
 
-# --- 2. THE MOUTH (Text to Speech) ---
-
-async def generate_audio_file(text, voice="en-GB-RyanNeural"): # <--- CHANGED HERE
+# --- 2. TEXT TO SPEECH (Bytes Based) ---
+async def generate_audio_bytes(text, voice="en-GB-RyanNeural"):
     """
-    Generates an MP3 file using Microsoft Edge's Free Neural TTS.
+    Generates audio and returns the bytes directly (no file saving needed if possible, 
+    but edge-tts saves to file easily, so we read it back).
     """
+    temp_file = "temp_response.mp3"
     communicate = edge_tts.Communicate(text, voice)
-    await communicate.save("response.mp3")
-
-def speak_text(text):
-    """
-    Wrapper to run the async generation and play the audio.
-    """
-    # 1. Generate the audio file (Async wrapper)
-    asyncio.run(generate_audio_file(text))
+    await communicate.save(temp_file)
     
-    # 2. Play the audio file using Pygame (Best for preventing UI lag)
-    pygame.mixer.init()
-    pygame.mixer.music.load("response.mp3")
-    pygame.mixer.music.play()
-    
-    # Block execution while audio plays so the UI stays in "Speaking" mode
-    while pygame.mixer.music.get_busy():
-        pygame.time.Clock().tick(10)
+    # Read the file back into memory
+    with open(temp_file, "rb") as f:
+        audio_bytes = f.read()
     
     # Clean up
-    pygame.mixer.music.unload()
-    try:
-        os.remove("response.mp3")
-    except:
-        pass
+    os.remove(temp_file)
+    return audio_bytes
+
+def get_audio_response(text):
+    """
+    Synchronous wrapper for the async generator.
+    """
+    return asyncio.run(generate_audio_bytes(text))

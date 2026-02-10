@@ -327,13 +327,12 @@ def process_message(user_input, chat_history):
 
     system_instruction = f"""
     You are N.A.O.M.I., an advanced AI assistant.
-    You manage the user's calendar using these tools: {', '.join(VALID_TYPES)}.
-    
     CRITICAL VOICE INSTRUCTIONS:
-    1. You are speaking via Text-to-Speech. Be concise (1-2 sentences) unless reading a list.
-    2. Do NOT use markdown (**bold**, *italics*, etc). It sounds bad.
+    1. You are speaking via Text-to-Speech.
+    2. Do NOT use markdown (**bold**, *italics*, etc). It sounds bad. Talk in natural conversation even when working through a list.
     3. When listing events, say "You have a meeting at 2 PM", not "Item dot meeting at 2 PM".
     4. If a tool fails, explain why briefly.
+    You manage the user's calendar using these tools: {', '.join(VALID_TYPES)}.
     """
 
     # --- PART 1: THINKING (API Call with Retry) ---
