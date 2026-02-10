@@ -2,10 +2,8 @@ import streamlit as st
 
 def render_jarvis_ui(state="idle"):
     """
-    Renders the N.A.O.M.I UI with:
-    1. The Central Reactor Animation
-    2. A fixed-bottom Audio Player
-    3. Cinematic Subtitles
+    Renders the N.A.O.M.I v15.3 UI (Stabilized Transitions)
+    with integrated support for Fixed Audio Player.
     """
     
     # --- COLOR PALETTE ---
@@ -13,7 +11,7 @@ def render_jarvis_ui(state="idle"):
         "idle": "#00f3ff",      # Cyan
         "listening": "#d600ff", # Neon Purple
         "thinking": "#ffaa00",  # Amber/Gold
-        "speaking": "#00ff41"   # Matrix Green (Changed to differentiate speaking)
+        "speaking": "#ffffff"   # White
     }
     
     c = colors.get(state, colors["idle"])
@@ -23,79 +21,139 @@ def render_jarvis_ui(state="idle"):
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500&display=swap');
 
-        /* 1. THE CONTAINER */
         .jarvis-container {{
             position: relative;
             width: 100%;
-            height: 450px; /* Reduced height to fit subtitles */
+            height: 500px; /* Adjusted height to fit subtitles */
             display: flex;
             justify-content: center;
             align-items: center;
             background: transparent;
             overflow: hidden;
+            font-family: 'Orbitron', sans-serif;
         }}
 
-        /* 2. THE REACTOR (Animation) */
         .reactor {{
             position: relative;
-            width: 300px;
-            height: 300px;
+            width: 400px;
+            height: 400px;
             display: flex;
             justify-content: center;
             align-items: center;
-            border-radius: 50%;
-            background: radial-gradient(circle, {c}10 0%, transparent 70%);
-            box-shadow: 0 0 50px {c}20;
-            transition: all 0.5s ease;
+            /* Smoothly transition transform changes (like breathing/scaling) */
+            transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
         }}
 
-        .core-circle {{
-            width: 120px;
-            height: 120px;
-            background: {c};
-            border-radius: 50%;
-            box-shadow: 0 0 60px {c}, inset 0 0 20px rgba(255,255,255,0.8);
-            position: relative;
-            z-index: 10;
+        /* --- TITLE --- */
+        .core-text {{
+            position: absolute;
+            z-index: 20;
+            font-size: 26px;
+            font-weight: 900;
+            letter-spacing: 6px;
+            
+            /* The color variable {c} is baked here. */
+            background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
+            background-size: 200% auto;
+            color: #000;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            
+            animation: text-shimmer 3s linear infinite;
+            transition: all 0.6s ease;
         }}
 
+        /* --- ORGANIC RINGS --- */
         .blob-ring {{
             position: absolute;
-            width: 100%;
-            height: 100%;
-            border: 2px solid {c};
             border-radius: 50%;
-            box-shadow: 0 0 15px {c};
-            opacity: 0.6;
-            animation: spin 10s linear infinite;
+            /* CRITICAL: We transition border-color, box-shadow, opacity, and transform. */
+            transition: border-color 0.6s ease, box-shadow 0.6s ease, opacity 0.6s ease, border-width 0.6s ease;
+            box-shadow: 0 0 20px {c}40;
         }}
 
-        /* ANIMATION STATES */
-        .reactor.listening {{ transform: scale(1.1); }}
-        .reactor.listening .blob-ring {{ animation-duration: 4s; border-width: 4px; }}
-        
-        .reactor.thinking .core-circle {{ animation: pulse 0.5s alternate infinite; }}
-        
-        .reactor.speaking .blob-ring {{ animation: ripple 1.5s infinite; }}
+        /* Ring 1: Main Line */
+        .ring-1 {{
+            width: 300px; height: 300px;
+            border: 4px solid {c};
+            animation: wobble-1 10s ease-in-out infinite;
+        }}
 
-        @keyframes spin {{ 0% {{ transform: rotate(0deg); }} 100% {{ transform: rotate(360deg); }} }}
-        @keyframes pulse {{ 0% {{ opacity: 0.8; }} 100% {{ opacity: 1; box-shadow: 0 0 80px {c}; }} }}
-        @keyframes ripple {{ 0% {{ transform: scale(1); opacity: 0.8; }} 100% {{ transform: scale(1.5); opacity: 0; }} }}
+        /* Ring 2: Outer Echo */
+        .ring-2 {{
+            width: 320px; height: 320px;
+            border: 2px solid {c};
+            opacity: 0.4;
+            animation: wobble-2 15s ease-in-out infinite;
+        }}
 
-        /* 3. FIXED BOTTOM AUDIO PLAYER */
-        /* This targets the Streamlit Audio widget specifically */
+        /* Ring 3: Inner Ripple */
+        .ring-3 {{
+            width: 280px; height: 280px;
+            border: 1px solid {c};
+            opacity: 0.6;
+            animation: wobble-3 8s ease-in-out infinite;
+        }}
+
+        /* --- KEYFRAMES (CONSTANT) --- */
+        @keyframes wobble-1 {{
+            0%, 100% {{ border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; transform: rotate(0deg); }}
+            50% {{ border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; transform: rotate(180deg); }}
+        }}
+        @keyframes wobble-2 {{
+            0%, 100% {{ border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; transform: rotate(0deg); }}
+            33% {{ border-radius: 70% 30% 50% 50% / 30% 30% 70% 70%; transform: rotate(120deg); }}
+            66% {{ border-radius: 30% 70% 70% 30% / 30% 30% 30% 30%; transform: rotate(240deg); }}
+        }}
+        @keyframes wobble-3 {{
+            0%, 100% {{ border-radius: 40% 60% 60% 40% / 60% 30% 70% 40%; transform: rotate(0deg); }}
+            50% {{ border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; transform: rotate(-180deg); }}
+        }}
+        @keyframes text-shimmer {{ 
+            0% {{ background-position: 200% center; }} 
+            100% {{ background-position: -200% center; }} 
+        }}
+
+        /* --- STATE OVERRIDES --- */
+        .reactor.listening {{
+            transform: scale(1.05); /* Smooth zoom */
+        }}
+        .reactor.listening .blob-ring {{
+            opacity: 0.8;
+            box-shadow: 0 0 40px {c}60; /* Stronger glow */
+        }}
+
+        .reactor.thinking .blob-ring {{
+            animation-duration: 3s; 
+            animation-timing-function: cubic-bezier(0.86, 0, 0.07, 1); /* Zip... Wait... Zip */
+            border-width: 5px;
+            opacity: 1;
+        }}
+        
+        .reactor.speaking {{
+            animation: breath-pulse 3s ease-in-out infinite;
+        }}
+        
+        @keyframes breath-pulse {{
+            0% {{ transform: scale(1); }}
+            50% {{ transform: scale(1.12); }}
+            100% {{ transform: scale(1); }}
+        }}
+
+        /* --- NEW: FIXED BOTTOM AUDIO PLAYER --- */
+        /* Forces the Streamlit Audio widget to stick to the bottom */
         .stAudio {{
             position: fixed;
-            bottom: 10px;
-            left: 0;
-            right: 0;
-            width: 80%;
-            margin: 0 auto;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70%;
             z-index: 999;
-            background: rgba(0, 0, 0, 0.8);
-            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.9);
+            border-radius: 12px;
             padding: 10px;
             border: 1px solid {c};
+            box-shadow: 0 0 20px {c}40;
             backdrop-filter: blur(10px);
         }}
     </style>
@@ -104,18 +162,15 @@ def render_jarvis_ui(state="idle"):
     html_code = f"""
     <div class="jarvis-container">
         <div class="reactor {state}">
-            <div class="core-circle"></div>
-            <div class="blob-ring" style="width: 140%; height: 140%;"></div>
-            <div class="blob-ring" style="width: 180%; height: 180%; animation-direction: reverse;"></div>
+            <div class="blob-ring ring-2"></div>
+            <div class="blob-ring ring-1"></div>
+            <div class="blob-ring ring-3"></div>
+            <div class="core-text">N.A.O.M.I.</div>
         </div>
     </div>
     """
     
-    # Inject CSS
-    st.markdown(css_code, unsafe_allow_html=True)
-    
-    # Render HTML
-    st.markdown(html_code, unsafe_allow_html=True)
+    st.markdown(css_code + html_code, unsafe_allow_html=True)
 
 def render_subtitles(text):
     """
@@ -128,16 +183,22 @@ def render_subtitles(text):
     <div style="
         text-align: center; 
         font-family: 'Rajdhani', sans-serif; 
-        font-size: 24px; 
+        font-size: 26px; 
         color: #e0e0e0; 
-        background: rgba(0,0,0,0.5); 
-        padding: 15px; 
-        border-radius: 10px; 
-        margin-top: -50px; 
+        background: rgba(0,0,0,0.6); 
+        padding: 20px; 
+        border-radius: 12px; 
+        margin-top: -80px; /* Pulls it up into the container area */
+        margin-bottom: 80px; /* Spacing for the audio player */
         border-left: 4px solid #00f3ff;
         animation: fadein 1s;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+        position: relative;
+        z-index: 100;
     ">
         {text}
     </div>
-    <style>@keyframes fadein {{ from {{ opacity: 0; }} to {{ opacity: 1; }} }}</style>
+    <style>@keyframes fadein {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: translateY(0); }} }}</style>
     """, unsafe_allow_html=True)
