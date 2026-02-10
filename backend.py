@@ -408,7 +408,9 @@ def process_message(user_input, chat_history):
         try:
             final_response = chat.send_message(function_responses)
             return final_response.text.strip()
-        except:
-            return "Task completed."
+        except Exception as e:
+            # If Gemini fails to summarize, WE return the raw data manually.
+            print(f"Summarization failed: {e}")
+            return f"I checked your calendar. Here is the raw data: {tool_output}"
 
     return response.text.strip()
