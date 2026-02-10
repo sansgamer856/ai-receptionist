@@ -3,7 +3,7 @@ import streamlit as st
 def render_jarvis_ui(state="idle"):
     """
     Renders the N.A.O.M.I v15.3 UI (Stabilized Transitions)
-    with integrated support for Fixed Audio Player.
+    with integrated support for the Fixed Audio Player.
     """
     
     # --- COLOR PALETTE ---
@@ -21,10 +21,11 @@ def render_jarvis_ui(state="idle"):
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500&display=swap');
 
+        /* 1. MAIN CONTAINER */
         .jarvis-container {{
             position: relative;
             width: 100%;
-            height: 500px; /* Adjusted height to fit subtitles */
+            height: 600px; /* Main canvas height */
             display: flex;
             justify-content: center;
             align-items: center;
@@ -33,6 +34,7 @@ def render_jarvis_ui(state="idle"):
             font-family: 'Orbitron', sans-serif;
         }}
 
+        /* 2. THE REACTOR (Wobbly Version) */
         .reactor {{
             position: relative;
             width: 400px;
@@ -40,7 +42,6 @@ def render_jarvis_ui(state="idle"):
             display: flex;
             justify-content: center;
             align-items: center;
-            /* Smoothly transition transform changes (like breathing/scaling) */
             transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
         }}
 
@@ -51,14 +52,11 @@ def render_jarvis_ui(state="idle"):
             font-size: 26px;
             font-weight: 900;
             letter-spacing: 6px;
-            
-            /* The color variable {c} is baked here. */
             background: linear-gradient(90deg, {c}40 0%, {c} 50%, {c}40 100%);
             background-size: 200% auto;
             color: #000;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            
             animation: text-shimmer 3s linear infinite;
             transition: all 0.6s ease;
         }}
@@ -67,7 +65,6 @@ def render_jarvis_ui(state="idle"):
         .blob-ring {{
             position: absolute;
             border-radius: 50%;
-            /* CRITICAL: We transition border-color, box-shadow, opacity, and transform. */
             transition: border-color 0.6s ease, box-shadow 0.6s ease, opacity 0.6s ease, border-width 0.6s ease;
             box-shadow: 0 0 20px {c}40;
         }}
@@ -95,7 +92,7 @@ def render_jarvis_ui(state="idle"):
             animation: wobble-3 8s ease-in-out infinite;
         }}
 
-        /* --- KEYFRAMES (CONSTANT) --- */
+        /* --- KEYFRAMES --- */
         @keyframes wobble-1 {{
             0%, 100% {{ border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; transform: rotate(0deg); }}
             50% {{ border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; transform: rotate(180deg); }}
@@ -116,16 +113,16 @@ def render_jarvis_ui(state="idle"):
 
         /* --- STATE OVERRIDES --- */
         .reactor.listening {{
-            transform: scale(1.05); /* Smooth zoom */
+            transform: scale(1.05);
         }}
         .reactor.listening .blob-ring {{
             opacity: 0.8;
-            box-shadow: 0 0 40px {c}60; /* Stronger glow */
+            box-shadow: 0 0 40px {c}60;
         }}
 
         .reactor.thinking .blob-ring {{
             animation-duration: 3s; 
-            animation-timing-function: cubic-bezier(0.86, 0, 0.07, 1); /* Zip... Wait... Zip */
+            animation-timing-function: cubic-bezier(0.86, 0, 0.07, 1);
             border-width: 5px;
             opacity: 1;
         }}
@@ -140,21 +137,20 @@ def render_jarvis_ui(state="idle"):
             100% {{ transform: scale(1); }}
         }}
 
-        /* --- NEW: FIXED BOTTOM AUDIO PLAYER --- */
-        /* Forces the Streamlit Audio widget to stick to the bottom */
+        /* --- FIXED BOTTOM AUDIO PLAYER --- */
         .stAudio {{
             position: fixed;
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            width: 70%;
-            z-index: 999;
-            background: rgba(0, 0, 0, 0.9);
-            border-radius: 12px;
-            padding: 10px;
+            width: 60%;
+            z-index: 9999;
+            background: rgba(10, 10, 10, 0.95);
             border: 1px solid {c};
-            box-shadow: 0 0 20px {c}40;
-            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+            backdrop-filter: blur(5px);
+            padding: 5px;
         }}
     </style>
     """
@@ -183,20 +179,21 @@ def render_subtitles(text):
     <div style="
         text-align: center; 
         font-family: 'Rajdhani', sans-serif; 
-        font-size: 26px; 
+        font-size: 24px; 
         color: #e0e0e0; 
-        background: rgba(0,0,0,0.6); 
+        background: rgba(0,0,0,0.7); 
         padding: 20px; 
         border-radius: 12px; 
-        margin-top: -80px; /* Pulls it up into the container area */
-        margin-bottom: 80px; /* Spacing for the audio player */
-        border-left: 4px solid #00f3ff;
-        animation: fadein 1s;
         max-width: 800px;
-        margin-left: auto;
-        margin-right: auto;
+        
+        /* --- CHANGED HERE: Pushed down to avoid overlap --- */
+        margin: 10px auto 40px auto; 
+        
+        border-left: 4px solid #00f3ff;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         position: relative;
         z-index: 100;
+        animation: fadein 1s;
     ">
         {text}
     </div>
