@@ -19,7 +19,7 @@ import streamlit as st
 load_dotenv()
 
 # MODEL
-MODEL_NAME = 'gemini-1.5-flash' # 'gemini-3-flash-preview' is often experimental, 1.5-flash is stable for tools
+MODEL_NAME = 'gemini-3-flash-preview' # 'gemini-3-flash-preview' is often experimental, 1.5-flash is stable for tools
 
 # IDs (Replace these with your actual IDs if they change)
 SPREADSHEET_ID = '1EP_K4RV5djXxtNmV25CwNV5Jk2v6LP89eNixceSKE0I'

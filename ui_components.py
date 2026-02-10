@@ -25,7 +25,7 @@ def render_jarvis_ui(state="idle"):
         .jarvis-container {{
             position: relative;
             width: 100%;
-            height: 600px; /* Main canvas height */
+            height: 600px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -171,31 +171,42 @@ def render_jarvis_ui(state="idle"):
 def render_subtitles(text):
     """
     Renders cinematic subtitles below the animation.
+    SAFE VERSION: Uses a CSS class instead of inline styles to prevent parsing errors.
     """
     if not text:
         return
         
+    # We define the styles in a block first, then use the class.
+    # This prevents the "leak" seen in the screenshot.
     st.markdown(f"""
-    <div style="
-        text-align: center; 
-        font-family: 'Rajdhani', sans-serif; 
-        font-size: 24px; 
-        color: #e0e0e0; 
-        background: rgba(0,0,0,0.7); 
-        padding: 20px; 
-        border-radius: 12px; 
-        max-width: 800px;
+    <style>
+        .cinematic-subtitle {{
+            text-align: center;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 24px;
+            color: #e0e0e0;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 800px;
+            
+            /* Positioning fixes */
+            margin: 10px auto 40px auto;
+            
+            border-left: 4px solid #00f3ff;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+            z-index: 100;
+            animation: fadein 1s forwards;
+        }}
         
-        /* --- CHANGED HERE: Pushed down to avoid overlap --- */
-        margin: 10px auto 40px auto; 
-        
-        border-left: 4px solid #00f3ff;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-        position: relative;
-        z-index: 100;
-        animation: fadein 1s;
-    ">
+        @keyframes fadein {{
+            from {{ opacity: 0; transform: translateY(10px); }}
+            to {{ opacity: 1; transform: translateY(0); }}
+        }}
+    </style>
+    
+    <div class="cinematic-subtitle">
         {text}
     </div>
-    <style>@keyframes fadein {{ from {{ opacity: 0; transform: translateY(10px); }} to {{ opacity: 1; transform: translateY(0); }} }}</style>
     """, unsafe_allow_html=True)
