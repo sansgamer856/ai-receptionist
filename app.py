@@ -1,12 +1,13 @@
 import streamlit as st
 import time
 import base64
+import uuid
 from ui_components import render_jarvis_ui, render_subtitles
 import voice_engine
 import backend
 
 # --- PAGE CONFIG ---
-st.set_page_config(layout="wide", page_title="N.A.O.M.I. Core")
+st.set_page_config(layout="centered", page_title="N.A.O.M.I. Core") # Layout is now Centered
 
 # --- SESSION STATE ---
 if "messages" not in st.session_state:
@@ -14,24 +15,57 @@ if "messages" not in st.session_state:
 if "last_audio" not in st.session_state:
     st.session_state.last_audio = None
 
-# --- MOBILE AUDIO PLAYER FUNCTION ---
+# --- CSS HACKS FOR "TOUCH" UI ---
+st.markdown("""
+<style>
+    /* 1. Center the Audio Input and make it look integrated */
+    .stAudioInput {
+        width: 60% !important;
+        margin: 0 auto;
+        margin-top: -50px; /* Pulls the mic button UP towards the reactor */
+        position: relative;
+        z-index: 100;
+    }
+    
+    /* 2. Hide the ugly "Label" of the audio input */
+    .stAudioInput label {
+        display: none;
+    }
+    
+    /* 3. Style the Record Button (This targets Streamlit's internal classes - may vary) */
+    div[data-testid="stAudioInput"] button {
+        background-color: #00f3ff20;
+        border: 1px solid #00f3ff;
+        border-radius: 50%;
+        width: 60px;
+        height: 60px;
+    }
+    
+    /* 4. Hide standard header/footer for immersion */
+    header {visibility: hidden;}
+    footer {visibility: hidden;}
+</style>
+""", unsafe_allow_html=True)
+
+# --- MOBILE AUDIO PLAYER ---
 def autoplay_audio(audio_bytes):
-    """
-    Embeds an HTML5 player with Base64 audio to bypass some mobile restrictions.
-    """
+    unique_id = f"audio_{uuid.uuid4().hex}"
     b64 = base64.b64encode(audio_bytes.read()).decode()
     md = f"""
-        <audio controls autoplay playsinline style="width: 100%; margin-top: 10px; border-radius: 10px;">
+        <audio id="{unique_id}" controls autoplay playsinline style="display:none;">
             <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
         </audio>
         <script>
-            var audio = document.querySelector("audio");
-            audio.play().catch(function(error) {{
-                console.log("Mobile Autoplay Blocked (User Interaction Required): " + error);
-            }});
+            setTimeout(function() {{
+                var audio = document.getElementById("{unique_id}");
+                if (audio) {{
+                    audio.play().catch(function(error) {{
+                        console.log("Autoplay blocked: " + error);
+                    }});
+                }}
+            }}, 500);
         </script>
         """
-    # We render this inside a specific container so it looks like part of the UI
     st.markdown(md, unsafe_allow_html=True)
 
 # --- PROCESSOR ---
@@ -51,54 +85,40 @@ def process_command(user_text):
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
     
     # 3. SPEAKING
-    # Generate Audio Bytes
     audio_io = voice_engine.get_audio_response(ai_response)
     
     with placeholder_visual.container():
         render_jarvis_ui("speaking")
         render_subtitles(ai_response)
         
-        # --- NEW MOBILE PLAYER ---
         if audio_io:
             autoplay_audio(audio_io)
     
     # 4. WAIT & IDLE
-    # Simple calculation: 0.1s per character
     wait_time = len(ai_response) * 0.08
-    time.sleep(max(3, wait_time)) # Minimum 3 seconds
+    time.sleep(max(3, wait_time)) 
     
     with placeholder_visual.container():
         render_jarvis_ui("idle")
 
-# --- MAIN LAYOUT (SIDE-BY-SIDE) ---
-col_visual, col_controls = st.columns([3, 1])
+# --- MAIN UI STACK ---
 
-# --- LEFT COLUMN: VISUALS ---
-with col_visual:
-    st.markdown("<br>", unsafe_allow_html=True)
-    placeholder_visual = st.empty()
-    with placeholder_visual.container():
-        render_jarvis_ui("idle")
+# 1. VISUAL CORE
+placeholder_visual = st.empty()
+with placeholder_visual.container():
+    render_jarvis_ui("idle")
 
-# --- RIGHT COLUMN: CONTROLS ---
-with col_controls:
-    st.markdown("### 🕹️ Control Deck")
-    
-    # 1. AUDIO INPUT
-    audio_value = st.audio_input("Voice Uplink")
-    
-    # 2. TEXT INPUT
+# 2. INPUT CORE (Stacked directly below)
+# The CSS above pulls this UP so it sits near the reactor
+audio_value = st.audio_input("Voice Uplink")
+
+# 3. TEXT FALLBACK (Collapsible)
+with st.expander("⌨️ Manual Override"):
     with st.form("text_form"):
-        text_input = st.text_input("Manual Command", placeholder="Type here...")
+        text_input = st.text_input("Command", label_visibility="collapsed")
         submit_text = st.form_submit_button("EXECUTE", use_container_width=True)
 
-    # 3. LOGS
-    with st.expander("📝 System Logs", expanded=False):
-        for msg in reversed(st.session_state.messages[-5:]):
-            role = "🤖" if msg['role'] == "assistant" else "👤"
-            st.caption(f"{role} {msg['content']}")
-
-# --- TRIGGER LOGIC ---
+# --- LOGIC ---
 if submit_text and text_input:
     st.session_state.messages.append({"role": "user", "content": text_input})
     process_command(text_input)
@@ -109,7 +129,6 @@ if audio_value and audio_value != st.session_state.last_audio:
     with placeholder_visual.container():
         render_jarvis_ui("listening")
     
-    # Save temp file for transcription
     with open("temp_input.wav", "wb") as f:
         f.write(audio_value.read())
         
