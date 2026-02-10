@@ -1,51 +1,45 @@
 import speech_recognition as sr
 import edge_tts
 import asyncio
-import os
+import io
 
-# --- 1. SPEECH TO TEXT (File Based) ---
-def transcribe_audio(audio_file_path):
+# --- 1. THE EARS (Speech to Text) ---
+def transcribe_audio(file_path):
     """
-    Takes an audio file path (WAV), reads it, and sends it to Google Free STT.
+    Transcribes a WAV file from the UI.
     """
     recognizer = sr.Recognizer()
-    
     try:
-        # Use AudioFile instead of Microphone
-        with sr.AudioFile(audio_file_path) as source:
-            # We don't need adjust_for_ambient_noise for direct files usually, 
-            # but it doesn't hurt.
+        with sr.AudioFile(file_path) as source:
             audio_data = recognizer.record(source)
-            
-        text = recognizer.recognize_google(audio_data)
-        return text.lower()
-    except sr.UnknownValueError:
-        return None
-    except sr.RequestError:
-        return "API Error"
+            text = recognizer.recognize_google(audio_data)
+            return text
     except Exception as e:
-        return f"Error: {e}"
+        print(f"Transcription Error: {e}")
+        return None
 
-# --- 2. TEXT TO SPEECH (Bytes Based) ---
-async def generate_audio_bytes(text, voice="en-GB-RyanNeural"):
+# --- 2. THE MOUTH (Text to Speech) ---
+async def _generate_audio(text, voice="en-GB-RyanNeural"):
     """
-    Generates audio and returns the bytes directly (no file saving needed if possible, 
-    but edge-tts saves to file easily, so we read it back).
+    Generates audio bytes in memory (no files needed).
     """
-    temp_file = "temp_response.mp3"
     communicate = edge_tts.Communicate(text, voice)
-    await communicate.save(temp_file)
+    # capturing the audio stream into memory
+    audio_stream = io.BytesIO()
+    async for chunk in communicate.stream():
+        if chunk["type"] == "audio":
+            audio_stream.write(chunk["data"])
     
-    # Read the file back into memory
-    with open(temp_file, "rb") as f:
-        audio_bytes = f.read()
-    
-    # Clean up
-    os.remove(temp_file)
-    return audio_bytes
+    audio_stream.seek(0)
+    return audio_stream
 
 def get_audio_response(text):
     """
-    Synchronous wrapper for the async generator.
+    Synchronous wrapper that returns the audio data as bytes.
     """
-    return asyncio.run(generate_audio_bytes(text))
+    try:
+        audio_io = asyncio.run(_generate_audio(text))
+        return audio_io
+    except Exception as e:
+        print(f"TTS Error: {e}")
+        return None
