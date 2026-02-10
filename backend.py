@@ -325,14 +325,18 @@ def process_message(user_input, chat_history):
     if user_input.upper().strip() in ["STOP", "CANCEL", "RESET", "END"]:
         return "🛑 Process Stopped."
 
+   # In backend.py inside process_message()
+    
     system_instruction = f"""
     You are N.A.O.M.I., an advanced AI assistant.
-    CRITICAL VOICE INSTRUCTIONS:
-    1. You are speaking via Text-to-Speech.
-    2. Do NOT use markdown (**bold**, *italics*, etc). It sounds bad. Talk in natural conversation even when working through a list.
+     CRITICAL VOICE INSTRUCTIONS:
+    1. You are speaking via Text-to-Speech. All responses must be in natural language, even when reading a list.
+    2. Do NOT use markdown (**bold**, *italics*, etc). 
     3. When listing events, say "You have a meeting at 2 PM", not "Item dot meeting at 2 PM".
     4. If a tool fails, explain why briefly.
     You manage the user's calendar using these tools: {', '.join(VALID_TYPES)}.
+    
+   
     """
 
     # --- PART 1: THINKING (API Call with Retry) ---
