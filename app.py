@@ -2,7 +2,7 @@ import streamlit as st
 import time
 import base64
 import uuid
-from ui_components import render_jarvis_ui, render_subtitles
+from ui_components import render_jarvis_ui
 import voice_engine
 import backend
 
@@ -15,125 +15,113 @@ if "messages" not in st.session_state:
 if "last_audio" not in st.session_state:
     st.session_state.last_audio = None
 
-# --- CSS MAGIC ---
+# --- CSS ARCHITECTURE ---
 st.markdown("""
 <style>
-    /* --- 1. HIDE THE UGLY 00:00 TIMER & JUNK --- */
+    /* 1. FORCE DARK THEME BACKGROUND */
+    .stApp {
+        background-color: #050505;
+    }
+
+    /* 2. SYSTEM LOG STYLING */
+    .system-log-container {
+        background: rgba(10, 10, 15, 0.9);
+        border: 1px solid #333;
+        border-left: 2px solid #00f3ff;
+        border-radius: 5px;
+        padding: 15px;
+        margin-top: 20px;
+        height: 200px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+        box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+    }
+    .log-entry {
+        margin-bottom: 8px;
+        border-bottom: 1px dashed #222;
+        padding-bottom: 4px;
+    }
+    .log-user { color: #00f3ff; } /* Cyan */
+    .log-ai { color: #00ff9d; }   /* Green */
+    .log-time { color: #555; font-size: 10px; margin-right: 8px; }
+
+    /* 3. AUDIO INPUT UI CUSTOMIZATION */
     [data-testid="stAudioInput"] {
-        width: 70px !important;
-        height: 70px !important;
-        margin: 0 auto !important;
-        margin-top: -50px !important; /* Pull closer to ball */
-        position: relative;
-        z-index: 1000;
-        overflow: visible !important;
-    }
-
-    /* This specific selector targets the text container for the timer */
-    [data-testid="stAudioInput"] > div:first-child > div:first-child > div:nth-child(2),
-    [data-testid="stAudioInput"] [data-testid="stMarkdownContainer"] p {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
+        width: 100% !important; /* Full width as requested */
+        margin-top: 20px !important;
     }
     
-    /* Hide waveform canvas */
-    [data-testid="stAudioInput"] canvas { display: none !important; }
-    
-    /* Hide secondary buttons (trash, etc) */
-    [data-testid="stAudioInput"] button[kind="secondary"],
-    [data-testid="stAudioInput"] button[kind="tertiary"] {
-        display: none !important; 
-    }
-
-    /* --- 2. MIC BUTTON STYLING (The Toggle) --- */
+    /* Style the Primary Button (Mic/Stop) */
     [data-testid="stAudioInput"] button[kind="primary"] {
-        width: 70px !important;
-        height: 70px !important;
-        border-radius: 50% !important;
-        background: rgba(20, 20, 20, 0.4) !important;
-        border: 1px solid #444 !important;
-        color: #888 !important;
-        box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        background: #1a1a1a !important;
+        border: 1px solid #00f3ff !important;
+        color: #00f3ff !important;
         transition: all 0.2s ease;
     }
-
-    /* Hover */
     [data-testid="stAudioInput"] button[kind="primary"]:hover {
-        border-color: #d600ff !important;
-        color: #d600ff !important;
-        box-shadow: 0 0 15px #d600ff60;
-        transform: scale(1.05);
+        background: rgba(0, 243, 255, 0.1) !important;
+        box-shadow: 0 0 15px rgba(0, 243, 255, 0.3);
     }
 
-    /* --- 3. THE "LISTENING" STATE OVERRIDE --- */
-    /* This detects if the Stop Button exists (meaning we are recording) */
-    
-    /* A. PULSE THE MIC BUTTON */
-    [data-testid="stAudioInput"] button[title="Stop recording"] {
-        background: rgba(214, 0, 255, 0.1) !important;
-        border-color: #d600ff !important;
-        box-shadow: 0 0 20px #d600ff !important;
-        color: #d600ff !important;
-        animation: pulse-mic 1.5s infinite;
-    }
+    /* 4. THE REAL-TIME "LISTENING" TRIGGER */
+    /* When the button title is "Stop recording", it means the mic is LIVE.
+       We use this to OVERRIDE the Reactor CSS to the 'Listening' state.
+    */
 
-    /* B. FORCE THE REACTOR TO LOOK LIKE 'STATE=LISTENING' */
-    /* We copy the exact physics from ui_components.py here */
-    
+    /* A. Scale Reactor */
     body:has(button[title="Stop recording"]) .reactor {
-        transform: scale(1.05) !important;
+        transform: scale(1.1) !important;
     }
-
+    
+    /* B. Force Neon Purple Rings (#d600ff) */
     body:has(button[title="Stop recording"]) .blob-ring {
         border-color: #d600ff !important;
-        box-shadow: 0 0 40px #d600ff60 !important;
-        opacity: 0.9 !important;
-        border-width: 3px !important;
+        box-shadow: 0 0 50px #d600ff80 !important;
+        opacity: 1 !important;
+        border-width: 4px !important;
+        animation: wobble-1 2s linear infinite !important; /* Faster spin */
     }
     
+    /* C. Force Purple Text */
     body:has(button[title="Stop recording"]) .core-text {
-        color: #d600ff !important;
-        text-shadow: 0 0 20px #d600ff !important;
-        /* Change the gradient text fill to purple */
-        background: linear-gradient(90deg, #d600ff40 0%, #d600ff 50%, #d600ff40 100%) !important;
+        background: linear-gradient(90deg, #d600ff 0%, #ff00ff 100%) !important;
         -webkit-background-clip: text !important;
         -webkit-text-fill-color: transparent !important;
+        text-shadow: 0 0 20px #d600ff !important;
     }
 
-    @keyframes pulse-mic {
-        0% { box-shadow: 0 0 10px #d600ff; }
-        50% { box-shadow: 0 0 25px #d600ff; }
-        100% { box-shadow: 0 0 10px #d600ff; }
-    }
-
+    /* Hide standard header/footer */
     header, footer {visibility: hidden;}
-    
+
 </style>
 """, unsafe_allow_html=True)
 
-# --- ROBUST AUDIO PLAYER ---
-def autoplay_audio(audio_data):
-    try:
-        if hasattr(audio_data, 'read'): audio_bytes = audio_data.read()
-        else: audio_bytes = audio_data
-        b64 = base64.b64encode(audio_bytes).decode()
-        unique_id = f"audio_{uuid.uuid4().hex}"
-        md = f"""
-            <audio id="{unique_id}" autoplay playsinline style="display:none;">
-                <source src="data:audio/mp3;base64,{b64}" type="audio/mp3">
-            </audio>
-            <script>
-                setTimeout(function() {{
-                    var audio = document.getElementById("{unique_id}");
-                    if (audio) {{ audio.play().catch(e => console.error(e)); }}
-                }}, 500);
-            </script>
+# --- SYSTEM LOG COMPONENT ---
+def render_system_log():
+    """Renders the chat history as a system log."""
+    log_html = '<div class="system-log-container">'
+    
+    if not st.session_state.messages:
+        log_html += '<div class="log-entry"><span class="log-time">SYS</span> <span style="color:#666">System Initialized. Awaiting Input...</span></div>'
+    
+    for msg in reversed(st.session_state.messages): # Show newest first
+        role_class = "log-user" if msg["role"] == "user" else "log-ai"
+        role_label = "USER_UPLINK" if msg["role"] == "user" else "CORE_SYSTEM"
+        timestamp = time.strftime("%H:%M:%S")
+        
+        log_html += f"""
+        <div class="log-entry">
+            <span class="log-time">[{timestamp}]</span>
+            <span class="{role_class}">[{role_label}]:</span> 
+            <span style="color: #ddd;">{msg["content"]}</span>
+        </div>
         """
-        st.markdown(md, unsafe_allow_html=True)
-    except Exception: pass
+    
+    log_html += '</div>'
+    st.markdown(log_html, unsafe_allow_html=True)
 
-# --- PROCESSOR ---
+# --- MAIN PROCESSOR ---
 def process_command(user_text):
     
     # 1. VISUAL: THINKING (Amber)
@@ -149,46 +137,48 @@ def process_command(user_text):
         
     st.session_state.messages.append({"role": "assistant", "content": ai_response})
     
-    # 3. VISUAL: SPEAKING (Green + Subtitles)
-    audio_io = voice_engine.get_audio_response(ai_response)
-    
+    # 3. VISUAL: SPEAKING (Green)
+    placeholder_visual.empty()
     with placeholder_visual.container():
         render_jarvis_ui("speaking")
-        render_subtitles(ai_response) 
-        if audio_io: autoplay_audio(audio_io)
     
-    # 4. IDLE DELAY
+    # 4. AUDIO: NATIVE AUTOPLAY (Reliable)
+    audio_io = voice_engine.get_audio_response(ai_response)
+    if audio_io:
+        # Use native Streamlit audio with autoplay=True (Requires Streamlit 1.29+)
+        st.audio(audio_io, format="audio/mp3", autoplay=True)
+
+    # 5. RETURN TO IDLE (After a delay)
     time.sleep(max(3, len(ai_response) * 0.07))
+    placeholder_visual.empty()
     with placeholder_visual.container():
         render_jarvis_ui("idle")
 
-# --- UI LAYOUT ---
+# --- UI LAYOUT STACK ---
 
-# 1. THE REACTOR
+# 1. THE REACTOR (Visual Core)
 placeholder_visual = st.empty()
 with placeholder_visual.container():
     render_jarvis_ui("idle")
 
 # 2. SPACER
-st.write("") 
+st.write("")
 
-# 3. THE MIC
-audio_value = st.audio_input("Voice Uplink")
+# 3. FULL MIC UI (Visible, not hidden)
+# The CSS above ensures the "Recording" state triggers the Reactor changes.
+audio_value = st.audio_input("Voice Command Uplink")
 
-# 4. MANUAL OVERRIDE (Hidden Menu)
-with st.expander("Manual Override"):
-    with st.form("manual"):
-        txt = st.text_input("Command")
-        sub = st.form_submit_button("Send")
-    if sub and txt:
-        st.session_state.messages.append({"role": "user", "content": txt})
-        process_command(txt)
+# 4. SYSTEM LOG (Chat History)
+# We use an empty placeholder so we can update it dynamically if needed
+log_placeholder = st.empty()
+with log_placeholder.container():
+    render_system_log()
 
-# --- LOGIC ---
+# --- LOGIC CONTROL ---
 if audio_value and audio_value != st.session_state.last_audio:
     st.session_state.last_audio = audio_value
     
-    # Immediate 'Thinking' Feedback (since recording is done)
+    # Immediate 'Thinking' Feedback
     with placeholder_visual.container():
         render_jarvis_ui("thinking")
         
@@ -199,8 +189,16 @@ if audio_value and audio_value != st.session_state.last_audio:
     
     if detected_text:
         st.session_state.messages.append({"role": "user", "content": detected_text})
+        
+        # Update Log Immediately to show User Input
+        with log_placeholder.container():
+            render_system_log()
+            
         process_command(detected_text)
+        
+        # Update Log Final (to show AI response)
+        with log_placeholder.container():
+            render_system_log()
     else:
-        # Return to idle if no voice found
         with placeholder_visual.container():
             render_jarvis_ui("idle")
