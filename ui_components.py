@@ -20,25 +20,25 @@ def render_jarvis_ui(state="idle"):
         @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@900&display=swap');
         @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500&display=swap');
 
-        /* 1. MAIN CONTAINER (TIGHTER) */
+        /* 1. MAIN CONTAINER */
         .jarvis-container {{
             position: relative;
             width: 100%;
-            height: 450px; /* Reduced from 600px for a tighter look */
+            height: 350px; 
             display: flex;
             justify-content: center;
             align-items: center;
             background: transparent;
-            overflow: hidden;
+            overflow: visible;
             font-family: 'Orbitron', sans-serif;
             margin-bottom: 0px;
         }}
 
-        /* 2. THE REACTOR (Scaled Down Slightly) */
+        /* 2. THE REACTOR */
         .reactor {{
             position: relative;
-            width: 350px; /* Reduced from 400px */
-            height: 350px;
+            width: 300px;
+            height: 300px;
             display: flex;
             justify-content: center;
             align-items: center;
@@ -64,15 +64,12 @@ def render_jarvis_ui(state="idle"):
         .blob-ring {{
             position: absolute;
             border-radius: 50%;
-            transition: border-color 0.6s ease, box-shadow 0.6s ease, opacity 0.6s ease, border-width 0.6s ease;
+            transition: all 0.5s ease;
             box-shadow: 0 0 20px {c}40;
         }}
 
-        /* Ring 1 */
         .ring-1 {{ width: 260px; height: 260px; border: 4px solid {c}; animation: wobble-1 10s ease-in-out infinite; }}
-        /* Ring 2 */
         .ring-2 {{ width: 280px; height: 280px; border: 2px solid {c}; opacity: 0.4; animation: wobble-2 15s ease-in-out infinite; }}
-        /* Ring 3 */
         .ring-3 {{ width: 240px; height: 240px; border: 1px solid {c}; opacity: 0.6; animation: wobble-3 8s ease-in-out infinite; }}
 
         /* --- KEYFRAMES --- */
@@ -87,21 +84,6 @@ def render_jarvis_ui(state="idle"):
         .reactor.thinking .blob-ring {{ animation-duration: 3s; animation-timing-function: cubic-bezier(0.86, 0, 0.07, 1); border-width: 5px; opacity: 1; }}
         .reactor.speaking {{ animation: breath-pulse 3s ease-in-out infinite; }}
         @keyframes breath-pulse {{ 0% {{ transform: scale(1); }} 50% {{ transform: scale(1.12); }} 100% {{ transform: scale(1); }} }}
-
-        /* --- FIXED BOTTOM AUDIO PLAYER --- */
-        .stAudio {{
-            position: fixed;
-            bottom: 10px;
-            left: 50%;
-            transform: translateX(-50%);
-            width: 50%;
-            z-index: 9999;
-            background: rgba(10, 10, 10, 0.95);
-            border: 1px solid {c};
-            border-radius: 12px;
-            backdrop-filter: blur(5px);
-            padding: 5px;
-        }}
     </style>
     """
 
@@ -120,7 +102,7 @@ def render_jarvis_ui(state="idle"):
 
 def render_subtitles(text):
     """
-    Renders subtitles closer to the UI.
+    Renders subtitles with built-in markdown/list handling.
     """
     if not text:
         return
@@ -130,21 +112,38 @@ def render_subtitles(text):
         .cinematic-subtitle {{
             text-align: center;
             font-family: 'Rajdhani', sans-serif;
-            font-size: 22px;
+            font-size: 20px;
             color: #e0e0e0;
             background: rgba(0, 0, 0, 0.8);
-            padding: 15px;
-            border-radius: 8px;
-            max-width: 700px;
-            /* TIGHTER MARGINS */
-            margin: -20px auto 20px auto; 
-            border-left: 3px solid #00f3ff;
+            padding: 20px;
+            border-radius: 12px;
+            max-width: 800px;
+            margin: -10px auto 20px auto; 
+            border-left: 4px solid #00f3ff;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
             position: relative;
             z-index: 100;
             animation: fadein 0.5s forwards;
+            line-height: 1.5;
         }}
+        
+        /* Markdown formatting for lists inside the subtitle */
+        .cinematic-subtitle ul, .cinematic-subtitle ol {{
+            text-align: left;
+            display: inline-block; /* Keeps the list block centered, but text left-aligned */
+            margin-top: 10px;
+            color: #00ff9d; /* Give lists a cool green tint */
+        }}
+        
+        .cinematic-subtitle li {{
+            margin-bottom: 5px;
+        }}
+
         @keyframes fadein {{ from {{ opacity: 0; transform: translateY(5px); }} to {{ opacity: 1; transform: translateY(0); }} }}
     </style>
-    <div class="cinematic-subtitle">{text}</div>
+    
+    <div class="cinematic-subtitle">
+        {text}
+
+    </div>
     """, unsafe_allow_html=True)
